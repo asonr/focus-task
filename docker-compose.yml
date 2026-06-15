@@ -1,0 +1,39 @@
+services:
+  focus-task-api:
+    build:
+      context: ./backend
+    container_name: focus-task-api
+    environment:
+      FOCUS_TASK_BACKEND_PORT: 8765
+      FOCUS_TASK_DATABASE_URL: sqlite:////data/todo.db
+      FOCUS_TASK_SECRET_KEY: ${FOCUS_TASK_SECRET_KEY:-change-me-to-a-long-random-secret}
+      FOCUS_TASK_TOKEN_EXPIRE_MINUTES: ${FOCUS_TASK_TOKEN_EXPIRE_MINUTES:-10080}
+      FOCUS_TASK_PASSWORD_MIN_LENGTH: ${FOCUS_TASK_PASSWORD_MIN_LENGTH:-8}
+      FOCUS_TASK_CORS_ORIGINS: ${FOCUS_TASK_CORS_ORIGINS:-}
+    ports:
+      - "${FOCUS_TASK_API_PORT:-8765}:8765"
+    volumes:
+      - focus-task-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  focus-task-web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: /api
+    container_name: focus-task-web
+    depends_on:
+      focus-task-api:
+        condition: service_healthy
+    ports:
+      - "${FOCUS_TASK_WEB_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  focus-task-data:

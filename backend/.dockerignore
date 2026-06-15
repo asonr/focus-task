@@ -1,0 +1,13 @@
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+*.db
+todo.db
+build/
+dist/
+*.spec
+.DS_Store
