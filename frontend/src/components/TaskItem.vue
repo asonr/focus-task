@@ -2,19 +2,31 @@
   <div
     class="task-item"
     :class="{ done: task.done, selected, compact, pending: task.syncStatus === 'pending', conflict: task.syncStatus === 'conflict' }"
-    draggable="true"
+    tabindex="0"
+    role="button"
+    :aria-label="task.title || '未命名任务'"
     @click="$emit('select')"
-    @dragstart="$emit('dragstart', $event)"
+    @keydown.enter="$emit('select')"
     @contextmenu="$emit('contextmenu', $event)"
   >
-    <div class="task-checkbox" :class="{ done: task.done }" @click.stop="$emit('toggle')">
+    <div class="task-checkbox" :class="{ done: task.done }" @click.stop="$emit('toggle')" role="checkbox" :aria-checked="task.done">
       <svg v-if="task.done" class="check-icon" width="9" height="9" viewBox="0 0 9 9" fill="none">
         <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </div>
     <div class="task-content">
       <div class="task-title-row">
-        <div class="task-title">{{ task.title || '未命名任务' }}</div>
+        <div v-if="isEditing" class="inline-edit-wrap">
+          <input
+            ref="editInput"
+            v-model="editValue"
+            class="inline-edit-input"
+            @keydown.enter="confirmEdit"
+            @keydown.escape="cancelEdit"
+            @blur="confirmEdit"
+          />
+        </div>
+        <div v-else class="task-title" @dblclick.stop="startEdit">{{ task.title || '未命名任务' }}</div>
         <div v-if="task.syncStatus === 'pending'" class="task-state state-pending">待同步</div>
         <div v-else-if="task.syncStatus === 'conflict'" class="task-state state-conflict">冲突</div>
       </div>
@@ -29,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import type { Task } from '@/stores/taskStore'
 import { formatRelativeDue, isOverdueDateTime } from '@/utils/dateTime'
 
@@ -40,7 +52,7 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
-defineEmits(['select', 'toggle', 'dragstart', 'contextmenu'])
+const emit = defineEmits(['select', 'toggle', 'contextmenu', 'dblclick-title'])
 
 const isOverdue = computed(() => {
   if (!props.task.due || props.task.done) return false
@@ -49,6 +61,32 @@ const isOverdue = computed(() => {
 
 function formatDate(dateStr: string) {
   return formatRelativeDue(dateStr)
+}
+
+// ─── Inline Edit ───
+const isEditing = ref(false)
+const editValue = ref('')
+const editInput = ref<HTMLInputElement | null>(null)
+
+async function startEdit() {
+  isEditing.value = true
+  editValue.value = props.task.title || ''
+  await nextTick()
+  editInput.value?.focus()
+  editInput.value?.select()
+}
+
+function confirmEdit() {
+  if (!isEditing.value) return
+  const newTitle = editValue.value.trim()
+  isEditing.value = false
+  if (newTitle && newTitle !== props.task.title) {
+    emit('dblclick-title', props.task.clientId, newTitle)
+  }
+}
+
+function cancelEdit() {
+  isEditing.value = false
 }
 </script>
 
@@ -199,5 +237,30 @@ function formatDate(dateStr: string) {
 @keyframes taskIn {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Inline Edit ─── */
+.inline-edit-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.inline-edit-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid oklch(60% 0.12 240);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px oklch(60% 0.12 240 / 0.12);
+}
+
+/* ─── Focus Visible ─── */
+.task-item:focus-visible {
+  outline: 2px solid oklch(60% 0.12 240);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 </style>

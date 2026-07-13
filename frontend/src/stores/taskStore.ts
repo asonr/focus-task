@@ -379,5 +379,6 @@ export const useTaskStore = defineStore('tasks', () => {
     removeTask,
     selectTask,
     setView,
+    saveLocal,
   }
 })

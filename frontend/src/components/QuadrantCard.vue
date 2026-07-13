@@ -1,7 +1,9 @@
 <template>
   <div
     class="quadrant"
-    :class="['q' + quadrant, { 'drag-over': isDragOver }, { 'q-dimmed': isDimmed }]"
+    :class="['q' + quadrant, { 'drag-over': isDragOver }, { 'q-dimmed': isDimmed }, { 'celebrate': celebrating }]"
+    role="region"
+    :aria-label="title"
     @dragover="onDragOver"
     @dragleave="onDragLeave"
     @drop="onDrop"
@@ -13,18 +15,28 @@
       <button class="quadrant-add" @click="showInlineAdd" title="添加任务">+</button>
     </div>
     <div class="task-list">
-      <TaskItem
-        v-for="task in visibleTasks"
-        :key="task.clientId"
-        :task="task"
-        :quadrant="quadrant"
-        :selected="task.clientId === store.selectedTaskId"
-        compact
-        @select="store.selectTask(task.clientId)"
-        @toggle="store.toggleDone(task.clientId)"
-        @contextmenu="onItemContext($event, task.clientId)"
-        @dragstart="onDragStart(task.clientId, $event)"
-      />
+      <draggable
+        :list="draggableList"
+        :group="{ name: 'tasks', pull: true, put: true }"
+        item-key="clientId"
+        :animation="180"
+        :empty-insert-threshold="30"
+        ghost-class="task-ghost"
+        @change="onDragChange"
+      >
+        <template #item="{ element: task }">
+          <TaskItem
+            :task="task"
+            :quadrant="quadrant"
+            :selected="task.clientId === store.selectedTaskId"
+            compact
+            @select="store.selectTask(task.clientId)"
+            @toggle="store.toggleDone(task.clientId)"
+            @contextmenu="onItemContext($event, task.clientId)"
+            @dblclick-title="onDblClickTitle(task.clientId, task.title)"
+          />
+        </template>
+      </draggable>
       <div v-if="visibleTasks.length === 0" class="empty-state visible">
         <div class="empty-state-icon">
           <!-- Q1: target -->
@@ -67,10 +79,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, inject } from 'vue'
+import { ref, computed, nextTick, inject, watch } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { useTaskFilter } from '@/composables/useTaskFilter'
+import draggable from 'vuedraggable'
 import TaskItem from './TaskItem.vue'
+import * as api from '@/api'
 
 const props = defineProps<{ quadrant: number }>()
 const store = useTaskStore()
@@ -81,6 +95,7 @@ const addVisible = ref(false)
 const addTitle = ref('')
 const addInputEl = ref<HTMLInputElement | null>(null)
 const isDragOver = ref(false)
+const celebrating = ref(false)
 
 const titles: Record<number, string> = {
   1: '重要 · 紧急', 2: '重要 · 不紧急', 3: '紧急 · 不重要', 4: '不重要 · 不紧急',
@@ -100,11 +115,26 @@ const emptyText = computed(() => emptyTexts[props.quadrant])
 
 const visibleTasks = computed(() => filterForQuadrant(store.quadrantTasks(props.quadrant)))
 
+// ─── Draggable list: mutable copy for vuedraggable ───
+// vuedraggable requires a mutable array ref. We sync back to store on changes.
+const draggableList = computed({
+  get: () => visibleTasks.value,
+  set: () => {} // vuedraggable mutates in-place; we handle reorder via onDragChange
+})
+
 const undoneCount = computed(() => visibleTasks.value.filter(t => !t.done).length)
 
 const isDimmed = computed(() => {
   const fq = store.filterQuadrant
   return fq !== null && fq !== undefined && fq !== props.quadrant
+})
+
+// ─── Celebration: when all tasks in quadrant are completed ───
+watch(undoneCount, (newVal, oldVal) => {
+  if (oldVal > 0 && newVal === 0 && visibleTasks.value.length > 0) {
+    celebrating.value = true
+    setTimeout(() => { celebrating.value = false }, 1500)
+  }
 })
 
 // ─── Inline Add ───
@@ -157,17 +187,49 @@ async function cancelAdd() {
   }, 150)
 }
 
-// ─── Drag & Drop ───
-let dragId = ''
-
-function onDragStart(clientId: string, e: DragEvent) {
-  dragId = clientId
-  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+// ─── Drag reorder (vuedraggable) ───
+function onDragChange(evt: any) {
+  // vuedraggable emits 'added' (cross-quadrant move) and 'moved' (same-quadrant reorder)
+  if (evt.added) {
+    // Cross-quadrant: update the task's quadrant
+    const task = evt.added.element
+    store.updateTask(task.clientId, { quadrant: props.quadrant })
+  }
+  if (evt.moved) {
+    // Same-quadrant reorder: update sort orders for all tasks in this quadrant
+    persistReorder()
+  }
 }
 
+async function persistReorder() {
+  // Reassign sortOrder based on current position in draggableList
+  const items = visibleTasks.value.map((t, i) => ({
+    clientId: t.clientId,
+    sortOrder: i
+  }))
+  // Update locally
+  for (const item of items) {
+    const task = store.tasks.find(t => t.clientId === item.clientId)
+    if (task) task.sortOrder = item.sortOrder
+  }
+  store.saveLocal()
+  // Persist to server
+  try {
+    await api.reorderTasks(items)
+  } catch {
+    // Offline — will sync later
+  }
+}
+
+// ─── Inline Edit (double-click title) ───
+function onDblClickTitle(clientId: string, newTitle: string) {
+  store.updateTask(clientId, { title: newTitle })
+}
+
+// ─── Legacy HTML5 drag events for visual feedback (drag-over outline) ───
+// vuedraggable handles the actual drag logic; these just provide visual hover feedback
 function onDragOver(e: DragEvent) {
   e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
   isDragOver.value = true
 }
 
@@ -178,10 +240,6 @@ function onDragLeave() {
 async function onDrop(e: DragEvent) {
   e.preventDefault()
   isDragOver.value = false
-  if (dragId) {
-    await store.updateTask(dragId, { quadrant: props.quadrant })
-    dragId = ''
-  }
 }
 
 // ─── Context Menu ───
@@ -203,6 +261,26 @@ function onItemContext(e: MouseEvent, clientId: string) {
 }
 .quadrant:hover { box-shadow: 0 18px 36px oklch(0% 0 0 / 0.045); transform: translateY(-1px); }
 .q-dimmed { opacity: 0.35; filter: grayscale(30%); }
+
+/* ─── Celebration animation ─── */
+.quadrant.celebrate {
+  animation: celebrateGlow 1.5s ease-out;
+}
+@keyframes celebrateGlow {
+  0%   { box-shadow: 0 0 0 0 oklch(62% 0.16 145 / 0.5); }
+  15%  { box-shadow: 0 0 20px 6px oklch(62% 0.16 145 / 0.4); }
+  30%  { box-shadow: 0 0 14px 4px oklch(62% 0.16 145 / 0.25); }
+  50%  { box-shadow: 0 0 8px 2px oklch(62% 0.16 145 / 0.12); }
+  100% { box-shadow: var(--shadow-card); }
+}
+.quadrant.celebrate .quadrant-title {
+  animation: celebrateText 1.5s ease-out;
+}
+@keyframes celebrateText {
+  0%   { transform: scale(1); }
+  15%  { transform: scale(1.08); }
+  30%  { transform: scale(1); }
+}
 
 .q1 { background: var(--q1-bg); border-color: var(--q1-border); }
 .q2 { background: var(--q2-bg); border-color: var(--q2-border); }
@@ -322,4 +400,11 @@ function onItemContext(e: MouseEvent, clientId: string) {
   font: inherit; font-size: 14px; color: var(--text-primary);
 }
 .inline-add-input::placeholder { color: var(--text-muted); }
+
+/* ─── Draggable ghost ─── */
+.task-ghost {
+  opacity: 0.35;
+  background: oklch(95% 0.02 240);
+  border-radius: var(--radius-sm);
+}
 </style>

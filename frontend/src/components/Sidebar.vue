@@ -1,12 +1,16 @@
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" role="navigation" aria-label="侧边栏导航">
     <div class="sidebar-section-label">视图</div>
     <div
       v-for="item in viewItems"
       :key="item.key"
       class="sidebar-item"
+      role="button"
+      tabindex="0"
+      :aria-label="item.label"
       :class="{ active: !isSettingsRoute && store.currentView === item.key && !store.filterQuadrant }"
       @click="clickView(item.key)"
+      @keydown.enter="clickView(item.key)"
     >
       <svg class="sidebar-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" :stroke="item.color" stroke-width="1.5">
         <component :is="item.icon" />
@@ -20,8 +24,12 @@
       v-for="q in quadrants"
       :key="q.id"
       class="sidebar-item"
+      role="button"
+      tabindex="0"
+      :aria-label="q.label"
       :class="{ active: !isSettingsRoute && store.filterQuadrant === q.id }"
       @click="clickQuadrant(q.id)"
+      @keydown.enter="clickQuadrant(q.id)"
     >
       <div class="sidebar-dot" :style="{ background: q.color }"></div>
       <span>{{ q.label }}</span>
@@ -31,8 +39,12 @@
     <div class="sidebar-section-label">统计</div>
     <div
       class="sidebar-item"
+      role="button"
+      tabindex="0"
+      aria-label="总结"
       :class="{ active: !isSettingsRoute && store.currentView === 'summary' }"
       @click="openSummary"
+      @keydown.enter="openSummary"
     >
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="oklch(55% 0.12 240)" stroke-width="1.5" style="flex-shrink:0">
         <path d="M3 13V5M7 13V8M11 13V3" stroke-linecap="round"/>
@@ -44,8 +56,12 @@
     </div>
     <div
       class="sidebar-item"
+      role="button"
+      tabindex="0"
+      aria-label="报告"
       :class="{ active: !isSettingsRoute && store.currentView === 'reports' }"
       @click="openReports"
+      @keydown.enter="openReports"
     >
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="oklch(55% 0.12 240)" stroke-width="1.5" style="flex-shrink:0">
         <rect x="2" y="2" width="5" height="12" rx="1"/><rect x="9" y="6" width="5" height="8" rx="1"/>
@@ -56,8 +72,12 @@
     <div class="sidebar-section-label">偏好</div>
     <div
       class="sidebar-item"
+      role="button"
+      tabindex="0"
+      aria-label="设置"
       :class="{ active: route.path === '/settings' }"
       @click="router.push('/settings')"
+      @keydown.enter="router.push('/settings')"
     >
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="oklch(56% 0.11 240)" stroke-width="1.5" style="flex-shrink:0">
         <circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.95 3.05l-1.4 1.4M4.45 11.55l-1.4 1.4M12.95 12.95l-1.4-1.4M4.45 4.45l-1.4-1.4"/>

@@ -163,4 +163,18 @@ html, body {
   box-shadow: 0 1px 2px oklch(0% 0 0 / 0.06);
   font-weight: 600;
 }
+
+/* ─── Accessibility: Global focus-visible ─── */
+*:focus-visible {
+  outline: 2px solid oklch(60% 0.12 240);
+  outline-offset: 2px;
+}
+button:focus-visible, input:focus-visible {
+  outline: 2px solid oklch(60% 0.12 240);
+  outline-offset: 1px;
+}
+/* Remove default focus ring for mouse clicks (only show for keyboard nav) */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
 </style>
