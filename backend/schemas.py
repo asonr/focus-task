@@ -98,8 +98,13 @@ class TaskOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TaskReorderItem(BaseModel):
+    client_id: str
+    sort_order: float
+
+
 class TaskReorder(BaseModel):
-    items: list[dict]  # [{"client_id": "...", "sort_order": 0.0}, ...]
+    items: list[TaskReorderItem]
 
 
 # ─── Sync ───

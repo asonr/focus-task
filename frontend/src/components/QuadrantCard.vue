@@ -71,7 +71,6 @@ import { useTaskStore, type Task } from '@/stores/taskStore'
 import { useTaskFilter } from '@/composables/useTaskFilter'
 import Sortable from 'sortablejs'
 import TaskItem from './TaskItem.vue'
-import * as api from '@/api'
 
 const props = defineProps<{ quadrant: number }>()
 const store = useTaskStore()
@@ -201,7 +200,7 @@ function handleSortEnd(evt: Sortable.SortableEvent) {
     localList.value = newOrder
 
     // Persist new sortOrders
-    persistReorder(newOrder)
+    void persistReorder(newOrder)
 
     // Release drag lock
     isDragging = false
@@ -222,10 +221,7 @@ function handleSortEnd(evt: Sortable.SortableEvent) {
 
     // Identify the moved task from data-client-id attribute on the TaskItem root element
     const clientId = evt.item.getAttribute('data-client-id')
-    if (clientId) {
-      // Update quadrant in store — Vue will re-render both quadrants
-      store.updateTask(clientId, { quadrant: toQ })
-    }
+    if (clientId) void persistCrossQuadrantMove(clientId, fromQ, toQ, newIdx)
 
     // Release drag lock — watch will sync localList for both source and destination
     isDragging = false
@@ -233,23 +229,32 @@ function handleSortEnd(evt: Sortable.SortableEvent) {
   }
 }
 
-function persistReorder(order: Task[]) {
+async function persistReorder(order: Task[]) {
   const items = order.map((t, i) => ({
     clientId: t.clientId,
     sortOrder: i
   }))
-  // Update locally in store
-  for (const item of items) {
-    const task = store.tasks.find(t => t.clientId === item.clientId)
-    if (task) task.sortOrder = item.sortOrder
-  }
-  store.saveLocal()
-  // Persist to server
-  try {
-    api.reorderTasks(items)
-  } catch {
-    // Offline — will sync later
-  }
+  await store.reorderTasks(items)
+}
+
+async function persistCrossQuadrantMove(clientId: string, fromQ: number, toQ: number, newIdx: number) {
+  const moved = store.tasks.find(t => t.clientId === clientId)
+  if (!moved) return
+
+  const destination = store
+    .quadrantTasks(toQ)
+    .filter(t => t.clientId !== clientId)
+  destination.splice(Math.max(0, newIdx), 0, moved)
+
+  const source = store
+    .quadrantTasks(fromQ)
+    .filter(t => t.clientId !== clientId)
+
+  await store.updateTask(clientId, { quadrant: toQ })
+  await store.reorderTasks([
+    ...source.map((t, i) => ({ clientId: t.clientId, sortOrder: i })),
+    ...destination.map((t, i) => ({ clientId: t.clientId, sortOrder: i })),
+  ])
 }
 
 // ─── Inline Add ───

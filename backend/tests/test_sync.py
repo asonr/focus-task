@@ -174,6 +174,41 @@ class SyncApiTest(unittest.TestCase):
         self.assertEqual(task["start_at"], "2026-06-12T09:30")
         self.assertEqual(task["due"], "2026-06-12T18:00")
 
+    def test_reorder_updates_sort_order_and_timestamp(self):
+        headers = self.auth_headers()
+        create_res = self.client.post(
+            "/api/tasks/sync/push",
+            json={
+                "tasks": [
+                    self.task_payload(client_id="task-a", title="A", sort_order=0),
+                    self.task_payload(client_id="task-b", title="B", sort_order=1),
+                ]
+            },
+            headers=headers,
+        )
+        self.assertEqual(create_res.status_code, 200)
+        original_updated_at = {task["client_id"]: task["updated_at"] for task in create_res.json()}
+
+        reorder_res = self.client.post(
+            "/api/tasks/reorder",
+            json={
+                "items": [
+                    {"client_id": "task-b", "sort_order": 0},
+                    {"client_id": "task-a", "sort_order": 1},
+                ]
+            },
+            headers=headers,
+        )
+        self.assertEqual(reorder_res.status_code, 200)
+
+        list_res = self.client.get("/api/tasks?include_deleted=true", headers=headers)
+        self.assertEqual(list_res.status_code, 200)
+        tasks = {task["client_id"]: task for task in list_res.json()}
+        self.assertEqual(tasks["task-b"]["sort_order"], 0)
+        self.assertEqual(tasks["task-a"]["sort_order"], 1)
+        self.assertGreaterEqual(tasks["task-b"]["updated_at"], original_updated_at["task-b"])
+        self.assertGreaterEqual(tasks["task-a"]["updated_at"], original_updated_at["task-a"])
+
 
 if __name__ == "__main__":
     unittest.main()

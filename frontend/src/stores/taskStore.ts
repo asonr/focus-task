@@ -112,6 +112,34 @@ export const useTaskStore = defineStore('tasks', () => {
     task.lastSyncedAt = task.updatedAt || new Date().toISOString()
   }
 
+  function markOrderPending(items: { clientId: string; sortOrder: number }[]) {
+    const now = new Date().toISOString()
+    for (const item of items) {
+      const task = tasks.value.find(t => t.clientId === item.clientId)
+      if (!task) continue
+      task.sortOrder = item.sortOrder
+      markPending(task, now)
+    }
+    saveLocal()
+  }
+
+  async function reorderTasks(items: { clientId: string; sortOrder: number }[]) {
+    if (items.length === 0) return
+
+    markOrderPending(items)
+
+    try {
+      await api.reorderTasks(items)
+      for (const item of items) {
+        const task = tasks.value.find(t => t.clientId === item.clientId)
+        if (task) markSynced(task)
+      }
+      saveLocal()
+    } catch {
+      // Offline - dirty sort orders will be pushed by the sync loop later.
+    }
+  }
+
   function mergeServerTasks(serverTasks: Task[]) {
     const localMap = new Map(tasks.value.map(t => [t.clientId, t]))
 
@@ -372,6 +400,7 @@ export const useTaskStore = defineStore('tasks', () => {
     markSynced,
     pruneSyncedDeleted,
     resolveConflict,
+    reorderTasks,
     fetchTasks,
     addTask,
     updateTask,

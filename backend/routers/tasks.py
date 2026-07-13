@@ -70,13 +70,15 @@ def delete_task(task_id: int, current_user: User = Depends(get_current_user), db
 
 @router.post("/reorder")
 def reorder_tasks(body: TaskReorder, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    now = utc_now()
     for item in body.items:
         task = db.query(Task).filter(
-            Task.client_id == item["client_id"],
+            Task.client_id == item.client_id,
             Task.user_id == current_user.id,
         ).first()
         if task:
-            task.sort_order = item["sort_order"]
+            task.sort_order = item.sort_order
+            task.updated_at = now
     db.commit()
     return {"ok": True}
 
