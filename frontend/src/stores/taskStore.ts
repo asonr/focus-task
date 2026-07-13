@@ -36,7 +36,7 @@ export const useTaskStore = defineStore('tasks', () => {
   // ─── State ───
   const tasks = ref<Task[]>(loadLocal())
   const selectedTaskId = ref<string | null>(null)
-  const currentView = ref<'matrix' | 'today' | 'done' | 'reports'>('matrix')
+  const currentView = ref<'matrix' | 'today' | 'done' | 'reports' | 'summary'>('matrix')
   const searchQuery = ref('')
   const filterQuadrant = ref<number | null>(null)
   const loading = ref(false)
@@ -350,7 +350,7 @@ export const useTaskStore = defineStore('tasks', () => {
     selectedTaskId.value = clientId
   }
 
-  function setView(view: 'matrix' | 'today' | 'done' | 'reports') {
+  function setView(view: 'matrix' | 'today' | 'done' | 'reports' | 'summary') {
     currentView.value = view
   }
 

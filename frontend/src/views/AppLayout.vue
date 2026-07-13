@@ -42,11 +42,11 @@
     <Sidebar />
 
     <!-- Main Content -->
-    <div class="main" :class="{ 'panel-hidden': !panelOpen, 'reports-active': isReportsView }">
+    <div class="main" :class="{ 'panel-hidden': !panelOpen, 'reports-active': isFullView }">
       <SettingsView v-if="isSettingsRoute" />
 
       <!-- Matrix View -->
-      <div v-else-if="!isReportsView" class="matrix-area">
+      <div v-else-if="!isFullView" class="matrix-area">
         <!-- Stats Bar -->
         <div class="stats-bar">
           <div class="stats-kicker">
@@ -95,11 +95,14 @@
       </div>
 
       <!-- Reports View -->
-      <ReportsView v-else />
+      <ReportsView v-else-if="isReportsView" />
+
+      <!-- Summary View -->
+      <SummaryView v-else-if="isSummaryView" />
 
       <!-- Detail Panel -->
       <Transition name="panel">
-        <DetailPanel v-if="panelOpen && !isReportsView && !isSettingsRoute" />
+        <DetailPanel v-if="panelOpen && !isFullView && !isSettingsRoute" />
       </Transition>
     </div>
 
@@ -154,6 +157,7 @@ import Sidebar from '@/components/Sidebar.vue'
 import QuadrantCard from '@/components/QuadrantCard.vue'
 import DetailPanel from '@/components/DetailPanel.vue'
 import ReportsView from '@/views/ReportsView.vue'
+import SummaryView from '@/views/SummaryView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 
 const store = useTaskStore()
@@ -162,6 +166,8 @@ const route = useRoute()
 const panelOpen = ref(true)
 const isSettingsRoute = computed(() => route.path === '/settings')
 const isReportsView = computed(() => !isSettingsRoute.value && store.currentView === 'reports')
+const isSummaryView = computed(() => !isSettingsRoute.value && store.currentView === 'summary')
+const isFullView = computed(() => isReportsView.value || isSummaryView.value)
 const showTaskChrome = computed(() => !isSettingsRoute.value)
 
 // ─── Window Dragging ───

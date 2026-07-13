@@ -29,6 +29,19 @@
     <div class="sidebar-section-label">统计</div>
     <div
       class="sidebar-item"
+      :class="{ active: !isSettingsRoute && store.currentView === 'summary' }"
+      @click="openSummary"
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="oklch(55% 0.12 240)" stroke-width="1.5" style="flex-shrink:0">
+        <path d="M3 13V5M7 13V8M11 13V3" stroke-linecap="round"/>
+        <circle cx="3" cy="4" r="1" fill="oklch(55% 0.12 240)" stroke="none"/>
+        <circle cx="7" cy="7" r="1" fill="oklch(55% 0.12 240)" stroke="none"/>
+        <circle cx="11" cy="2" r="1" fill="oklch(55% 0.12 240)" stroke="none"/>
+      </svg>
+      <span>总结</span>
+    </div>
+    <div
+      class="sidebar-item"
       :class="{ active: !isSettingsRoute && store.currentView === 'reports' }"
       @click="openReports"
     >
@@ -78,7 +91,7 @@ const quadrants = computed(() => [
   { id: 4, label: '不重要不紧急', color: 'oklch(54% 0.01 0)', badge: store.quadrantTasks(4).filter(t => !t.done).length },
 ])
 
-function clickView(key: 'matrix' | 'today' | 'done' | 'reports') {
+function clickView(key: 'matrix' | 'today' | 'done' | 'reports' | 'summary') {
   store.filterQuadrant = null
   store.setView(key)
   if (route.path === '/settings') {
@@ -97,6 +110,14 @@ function clickQuadrant(q: number) {
 function openReports() {
   store.filterQuadrant = null
   store.setView('reports')
+  if (route.path === '/settings') {
+    router.push('/')
+  }
+}
+
+function openSummary() {
+  store.filterQuadrant = null
+  store.setView('summary')
   if (route.path === '/settings') {
     router.push('/')
   }
