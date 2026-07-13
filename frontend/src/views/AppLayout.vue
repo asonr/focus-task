@@ -15,7 +15,7 @@
       <div class="header-divider" data-tauri-drag-region></div>
       <div class="header-brand" data-tauri-drag-region>
         <span class="header-title">Focus Task</span>
-        <span class="header-subtitle">聚焦任务桌面台</span>
+        <span class="header-subtitle">艾森豪威尔矩阵任务管理</span>
       </div>
       <div class="header-spacer" data-tauri-drag-region></div>
       <div v-if="showTaskChrome" class="header-actions">
@@ -23,7 +23,7 @@
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
             <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10L14 14"/>
           </svg>
-          <input type="text" v-model="store.searchQuery" placeholder="搜索任务…" />
+          <input ref="searchInput" type="text" v-model="store.searchQuery" placeholder="搜索任务… ⌘K" @keydown.escape="searchInput?.blur()" />
         </div>
         <button class="btn-icon" @click="panelOpen = !panelOpen" title="详情面板">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
@@ -153,6 +153,7 @@ import { ref, computed, reactive, onMounted, onUnmounted, provide } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTaskStore } from '@/stores/taskStore'
 import { useSyncStore } from '@/stores/syncStore'
+import { useTheme } from '@/composables/useTheme'
 import Sidebar from '@/components/Sidebar.vue'
 import QuadrantCard from '@/components/QuadrantCard.vue'
 import DetailPanel from '@/components/DetailPanel.vue'
@@ -164,6 +165,10 @@ const store = useTaskStore()
 const syncStore = useSyncStore()
 const route = useRoute()
 const panelOpen = ref(true)
+const searchInput = ref<HTMLInputElement | null>(null)
+
+// Initialize theme (applies dark/light class on <html>)
+useTheme()
 const isSettingsRoute = computed(() => route.path === '/settings')
 const isReportsView = computed(() => !isSettingsRoute.value && store.currentView === 'reports')
 const isSummaryView = computed(() => !isSettingsRoute.value && store.currentView === 'summary')
@@ -267,7 +272,20 @@ onMounted(async () => {
   }).catch(() => {
     // Offline — use local cache, that's fine
   })
+
+  // Cmd+K or / to focus search bar
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if ((e.metaKey && e.key === 'k') || (e.key === '/' && !isEditingText(e))) {
+      e.preventDefault()
+      searchInput.value?.focus()
+    }
+  })
 })
+
+function isEditingText(e: KeyboardEvent): boolean {
+  const t = e.target as HTMLElement
+  return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable
+}
 
 onUnmounted(() => {
   document.removeEventListener('click', hideContextMenu)
@@ -486,8 +504,9 @@ onUnmounted(() => {
 .sync-dot.syncing { background: oklch(62% 0.12 240); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
 
-/* Panel transition */
-.panel-enter-active { transition: opacity 160ms cubic-bezier(0.2, 0, 0, 1); }
-.panel-leave-active { transition: opacity 160ms cubic-bezier(0.2, 0, 0, 1); }
-.panel-enter-from, .panel-leave-to { opacity: 0; }
+/* Panel transition — slide + fade */
+.panel-enter-active { transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1), transform 200ms cubic-bezier(0.2, 0, 0, 1); }
+.panel-leave-active { transition: opacity 160ms cubic-bezier(0.2, 0, 0, 1), transform 160ms cubic-bezier(0.2, 0, 0, 1); }
+.panel-enter-from { opacity: 0; transform: translateX(20px); }
+.panel-leave-to { opacity: 0; transform: translateX(20px); }
 </style>

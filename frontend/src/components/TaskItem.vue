@@ -57,7 +57,11 @@ function formatDate(dateStr: string) {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 5px 6px; border-radius: var(--radius-sm);
   cursor: pointer; transition: background var(--transition);
-  position: relative; animation: taskIn 0.2s ease-out;
+  position: relative;
+}
+
+.task-item.task-new {
+  animation: taskIn 0.2s ease-out;
 }
 
 /* Quadrant-specific hover */
@@ -120,7 +124,7 @@ function formatDate(dateStr: string) {
   flex-wrap: wrap;
 }
 .task-title {
-  font-size: 14px; font-weight: 450; color: var(--text-primary);
+  font-size: 14px; font-weight: 500; color: var(--text-primary);
   line-height: 1.4; word-break: break-word; text-align: left;
   flex: 1;
   min-width: 0;
@@ -177,6 +181,19 @@ function formatDate(dateStr: string) {
 }
 .task-item.conflict {
   background-image: linear-gradient(to right, transparent, oklch(98% 0.02 20));
+}
+
+/* Compact mode (list views) */
+.task-item.compact {
+  padding: 3px 6px;
+}
+.task-item.compact .task-title {
+  font-size: 13px;
+  line-height: 1.35;
+}
+.task-item.compact .task-checkbox {
+  width: 13px; height: 13px;
+  margin-top: 2px;
 }
 
 @keyframes taskIn {

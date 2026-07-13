@@ -574,7 +574,7 @@ const periodLabel = computed(() => currentRange.value.label)
 .summary-heading h1 {
   font-size: 28px;
   line-height: 1.1;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -603,27 +603,8 @@ const periodLabel = computed(() => currentRange.value.label)
   box-shadow: 0 10px 24px oklch(0% 0 0 / 0.03);
 }
 
-.mode-pill {
-  height: 32px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background var(--transition), color var(--transition), box-shadow var(--transition);
-  white-space: nowrap;
-}
-
-.mode-pill:hover { color: var(--text-primary); }
-
-.mode-pill.active {
-  background: var(--surface);
-  color: var(--text-primary);
-  box-shadow: 0 1px 2px oklch(0% 0 0 / 0.06);
+.mode-segment {
+  /* Uses global .segment-control + .segment-btn */
 }
 
 .period-nav {
@@ -706,7 +687,7 @@ const periodLabel = computed(() => currentRange.value.label)
 .metric-value {
   font-size: 28px;
   line-height: 1;
-  font-weight: 680;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -775,7 +756,7 @@ const periodLabel = computed(() => currentRange.value.label)
 .panel-head h2 {
   font-size: 18px;
   line-height: 1.2;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-primary);
   margin-top: 3px;
 }

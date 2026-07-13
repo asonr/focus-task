@@ -62,9 +62,8 @@
   --transition: 160ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* ─── Dark Mode ─── */
-@media (prefers-color-scheme: dark) {
-  :root {
+/* ─── Dark Mode (class-based, toggled by JS) ─── */
+.theme-dark:root {
     --q1-bg: oklch(22% 0.02 var(--q1-hue));
     --q1-header: oklch(72% 0.14 var(--q1-hue));
     --q1-border: oklch(30% 0.04 var(--q1-hue));
@@ -108,14 +107,13 @@
 
     --shadow-card: 0 1px 3px oklch(0% 0 0 / 0.4);
     --shadow-panel: 0 2px 8px oklch(0% 0 0 / 0.4), 0 12px 32px oklch(0% 0 0 / 0.3);
-  }
-
-  html, body {
-    color-scheme: dark;
-  }
-
-  ::-webkit-scrollbar-thumb:hover { background: oklch(45% 0.01 240); }
 }
+
+.theme-dark html, .theme-dark body {
+    color-scheme: dark;
+}
+
+.theme-dark ::-webkit-scrollbar-thumb:hover { background: oklch(45% 0.01 240); }
 
 html, body {
   height: 100%;
@@ -132,4 +130,37 @@ html, body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: oklch(80% 0.01 240); }
+
+/* ─── Global Segment Control ─── */
+.segment-control {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.segment-control.narrow { width: fit-content; }
+.segment-btn, .mode-pill, .range-pill {
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), box-shadow var(--transition);
+  white-space: nowrap;
+}
+.segment-btn:hover, .mode-pill:hover, .range-pill:hover { color: var(--text-primary); }
+.segment-btn.active, .mode-pill.active, .range-pill.active {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px oklch(0% 0 0 / 0.06);
+  font-weight: 600;
+}
 </style>

@@ -12,6 +12,31 @@
       <article class="settings-card">
         <div class="card-head">
           <div>
+            <span class="card-kicker">外观</span>
+            <h2>主题模式</h2>
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label>应用外观</label>
+          <div class="segment-control">
+            <button
+              v-for="option in themeOptions"
+              :key="option.value"
+              class="segment-btn"
+              :class="{ active: theme.mode.value === option.value }"
+              @click="theme.setMode(option.value)"
+            >
+              {{ option.icon }} {{ option.label }}
+            </button>
+          </div>
+          <p class="field-note">{{ themeHint }}</p>
+        </div>
+      </article>
+
+      <article class="settings-card">
+        <div class="card-head">
+          <div>
             <span class="card-kicker">提醒策略</span>
             <h2>默认提醒时间</h2>
           </div>
@@ -110,8 +135,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSettingsStore, type ReminderLeadMinutes } from '@/stores/settingsStore'
+import { useTheme, type ThemeMode } from '@/composables/useTheme'
 
 const settings = useSettingsStore()
+const theme = useTheme()
+
+const themeOptions: { label: string; icon: string; value: ThemeMode }[] = [
+  { label: '亮色', icon: '☀️', value: 'light' },
+  { label: '暗色', icon: '🌙', value: 'dark' },
+  { label: '跟随系统', icon: '💻', value: 'system' },
+]
+
+const themeHint = computed(() => {
+  if (theme.mode.value === 'light') return '始终使用亮色外观，不跟随系统设置。'
+  if (theme.mode.value === 'dark') return '始终使用暗色外观，不跟随系统设置。'
+  return '自动跟随 macOS 系统外观设置切换亮色/暗色模式。'
+})
 
 const leadOptions: { label: string; value: ReminderLeadMinutes }[] = [
   { label: '准点', value: 0 },
@@ -189,7 +228,7 @@ async function sendTestNotification() {
 .settings-heading h1 {
   font-size: 28px;
   line-height: 1.1;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -201,7 +240,7 @@ async function sendTestNotification() {
 
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -226,7 +265,7 @@ async function sendTestNotification() {
 .card-head h2 {
   margin-top: 3px;
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -240,39 +279,6 @@ async function sendTestNotification() {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
-}
-
-.segment-control {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  padding: 4px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--surface);
-}
-
-.segment-control.narrow {
-  width: fit-content;
-}
-
-.segment-btn {
-  min-width: 68px;
-  height: 30px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  font: inherit;
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.segment-btn.active {
-  background: oklch(95% 0.015 240);
-  color: oklch(35% 0.1 240);
-  font-weight: 600;
 }
 
 .field-note {

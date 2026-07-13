@@ -8,7 +8,9 @@
       :class="{ active: !isSettingsRoute && store.currentView === item.key && !store.filterQuadrant }"
       @click="clickView(item.key)"
     >
-      <div class="sidebar-dot" :style="{ background: item.color }"></div>
+      <svg class="sidebar-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" :stroke="item.color" stroke-width="1.5">
+        <component :is="item.icon" />
+      </svg>
       <span>{{ item.label }}</span>
       <span class="sidebar-badge">{{ item.badge || '' }}</span>
     </div>
@@ -66,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, h } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { toDateKey } from '@/utils/dateTime'
 import { useRoute, useRouter } from 'vue-router'
@@ -78,10 +80,15 @@ const isSettingsRoute = computed(() => route.path === '/settings')
 
 const today = new Date().toISOString().slice(0, 10)
 
+// SVG icon components for sidebar items
+const MatrixIcon = h('path', { d: 'M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9zM2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })
+const TodayIcon = h('path', { d: 'M2 2h12v12H2zM2 6h12M6 2v4M8 9l2 2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })
+const DoneIcon = h('path', { d: 'M3 8.5L6.5 12L13 4.5M8 2a6 6 0 1 0 0 12a6 6 0 0 0 0-12z', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })
+
 const viewItems = computed(() => [
-  { key: 'matrix' as const, label: '四象限矩阵', color: 'oklch(55% 0.12 240)', badge: store.activeTasks.length },
-  { key: 'today' as const, label: '今日任务', color: 'oklch(62% 0.14 4)', badge: store.activeTasks.filter(t => toDateKey(t.due) === today && !t.done).length },
-  { key: 'done' as const, label: '已完成', color: 'oklch(64% 0.01 240)', badge: store.doneTasks.length },
+  { key: 'matrix' as const, label: '四象限矩阵', color: 'oklch(55% 0.12 240)', icon: MatrixIcon, badge: store.activeTasks.length },
+  { key: 'today' as const, label: '今日任务', color: 'oklch(62% 0.14 4)', icon: TodayIcon, badge: store.activeTasks.filter(t => toDateKey(t.due) === today && !t.done).length },
+  { key: 'done' as const, label: '已完成', color: 'oklch(52% 0.15 145)', icon: DoneIcon, badge: store.doneTasks.length },
 ])
 
 const quadrants = computed(() => [
@@ -151,13 +158,14 @@ function openSummary() {
   cursor: pointer;
   font-size: 14px;
   color: var(--text-secondary);
-  font-weight: 450;
+  font-weight: 500;
   transition: background var(--transition), color var(--transition);
   user-select: none;
 }
 .sidebar-item:hover { background: var(--surface-mid); color: var(--text-primary); }
 .sidebar-item.active { background: oklch(95% 0.015 240); color: oklch(35% 0.1 240); font-weight: 500; }
 .sidebar-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sidebar-icon { flex-shrink: 0; }
 .sidebar-badge {
   margin-left: auto;
   font-size: 12px;
