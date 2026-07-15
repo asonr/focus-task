@@ -39,7 +39,7 @@ export async function loadAuthState(): Promise<AuthState> {
 
   try {
     const state = await invoke<AuthState | null>('load_auth_state')
-    if (!state) return { token: '', username: '' }
+    if (!state?.token) return loadBrowserAuthState()
     return state
   } catch {
     return loadBrowserAuthState()

@@ -29,11 +29,24 @@ export interface Task {
   conflictServer?: Task
 }
 
-const LOCAL_KEY = 'focus-task-local-cache'
+const LOCAL_KEY_PREFIX = 'focus-task-local-cache'
+
+function normalizeOwner(username: string) {
+  return username.trim().toLowerCase() || 'anonymous'
+}
+
+function ownerFromBrowserStorage() {
+  return normalizeOwner(localStorage.getItem('focus-task-username') || '')
+}
+
+function localKeyFor(owner: string) {
+  return `${LOCAL_KEY_PREFIX}:${encodeURIComponent(owner)}`
+}
 
 export const useTaskStore = defineStore('tasks', () => {
   const settings = useSettingsStore()
   // ─── State ───
+  const localOwner = ref(ownerFromBrowserStorage())
   const tasks = ref<Task[]>(loadLocal())
   const selectedTaskId = ref<string | null>(null)
   const currentView = ref<'matrix' | 'today' | 'done' | 'reports' | 'summary'>('matrix')
@@ -42,13 +55,12 @@ export const useTaskStore = defineStore('tasks', () => {
   const loading = ref(false)
 
   // ─── Local cache for offline ───
-  function loadLocal(): Task[] {
+  function loadLocal(owner = localOwner.value): Task[] {
     try {
-      const raw = localStorage.getItem(LOCAL_KEY)
+      const raw = localStorage.getItem(localKeyFor(owner))
       const data = raw ? JSON.parse(raw) : []
-      if (!data.length) return seedData()
       return data.map(normalizeTask)
-    } catch { return seedData() }
+    } catch { return [] }
   }
 
   function normalizeTask(task: Task): Task {
@@ -62,44 +74,19 @@ export const useTaskStore = defineStore('tasks', () => {
     }
   }
 
-  function seedData(): Task[] {
-    const today = new Date().toISOString().slice(0, 10)
-    const seeds = [
-      { quadrant: 1, title: '完成季度报告', notes: '需要包含Q3数据分析', due: `${today}T18:00`, tag: '工作' },
-      { quadrant: 1, title: '修复生产环境故障', notes: '', due: '', tag: '技术' },
-      { quadrant: 2, title: '制定年度学习计划', notes: '包括技术提升和阅读计划', due: '', tag: '成长' },
-      { quadrant: 2, title: '健身计划制定', notes: '每周3次有氧+力量训练', due: '', tag: '健康' },
-      { quadrant: 2, title: '整理个人财务规划', notes: '', due: '', tag: '财务' },
-      { quadrant: 3, title: '回复非紧急邮件', notes: '', due: `${today}T16:00`, tag: '' },
-      { quadrant: 3, title: '参加例行会议', notes: '可以委托他人汇报', due: '', tag: '工作' },
-      { quadrant: 4, title: '刷社交媒体', notes: '', due: '', tag: '' },
-      { quadrant: 4, title: '整理桌面文件夹', notes: '无明确截止时间', due: '', tag: '' },
-    ]
-    return seeds.map((s, i) => ({
-      clientId: crypto.randomUUID(),
-      quadrant: s.quadrant,
-      title: s.title,
-      notes: s.notes,
-      done: false,
-      startAt: '',
-      due: s.due,
-      tag: s.tag,
-      repeat: 'none',
-      notifyOnStart: true,
-      notifyOnDue: true,
-      notifyOnOverdue: true,
-      showInFocus: false,
-      sortOrder: 0,
-      doneAt: '',
-      deleted: false,
-      createdAt: new Date(Date.now() - i * 60000).toISOString(),
-      updatedAt: new Date(Date.now() - i * 60000).toISOString(),
-      syncStatus: 'pending',
-    }))
+  function saveLocal() {
+    localStorage.setItem(localKeyFor(localOwner.value), JSON.stringify(tasks.value))
   }
 
-  function saveLocal() {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(tasks.value))
+  function useUser(username: string) {
+    const nextOwner = normalizeOwner(username)
+    if (localOwner.value === nextOwner) return
+
+    localOwner.value = nextOwner
+    tasks.value = loadLocal(nextOwner)
+    selectedTaskId.value = null
+    searchQuery.value = ''
+    filterQuadrant.value = null
   }
 
   function markPending(task: Task, updatedAt = new Date().toISOString()) {
@@ -395,6 +382,8 @@ export const useTaskStore = defineStore('tasks', () => {
     doneTasks,
     conflictTasks,
     filterQuadrant,
+    localOwner,
+    useUser,
     mergeServerTasks,
     pendingTasks,
     markSynced,

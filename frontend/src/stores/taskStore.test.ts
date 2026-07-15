@@ -74,4 +74,24 @@ describe('taskStore reorderTasks', () => {
     expect(store.tasks.find(t => t.clientId === 'a')?.sortOrder).toBe(1)
     expect(store.tasks.every(t => t.syncStatus === 'pending')).toBe(true)
   })
+
+  it('keeps local task cache isolated by username', () => {
+    const store = useTaskStore()
+
+    store.useUser('admin')
+    store.tasks = [makeTask('admin-task', 0)]
+    store.saveLocal()
+
+    store.useUser('user')
+    expect(store.tasks).toEqual([])
+
+    store.tasks = [makeTask('user-task', 0)]
+    store.saveLocal()
+
+    store.useUser('admin')
+    expect(store.tasks.map(t => t.clientId)).toEqual(['admin-task'])
+
+    store.useUser('user')
+    expect(store.tasks.map(t => t.clientId)).toEqual(['user-task'])
+  })
 })

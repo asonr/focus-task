@@ -11,6 +11,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from auth import hash_password
+from bootstrap import bootstrap_admin_user
+import config
 from database import Base, get_db
 from main import app
 from models import User
@@ -208,6 +210,93 @@ class SyncApiTest(unittest.TestCase):
         self.assertEqual(tasks["task-a"]["sort_order"], 1)
         self.assertGreaterEqual(tasks["task-b"]["updated_at"], original_updated_at["task-b"])
         self.assertGreaterEqual(tasks["task-a"]["updated_at"], original_updated_at["task-a"])
+
+    def test_admin_can_list_users_and_regular_user_cannot(self):
+        admin_headers = self.auth_headers("admin")
+        bob_headers = self.auth_headers("bob")
+
+        admin_res = self.client.get("/api/users", headers=admin_headers)
+        self.assertEqual(admin_res.status_code, 200)
+        users = {user["username"]: user for user in admin_res.json()}
+        self.assertTrue(users["admin"]["is_admin"])
+        self.assertFalse(users["bob"]["is_admin"])
+
+        bob_res = self.client.get("/api/users", headers=bob_headers)
+        self.assertEqual(bob_res.status_code, 403)
+
+    def test_admin_can_disable_reset_password_and_delete_user(self):
+        admin_headers = self.auth_headers("admin")
+        self.auth_headers("bob")
+
+        users_res = self.client.get("/api/users", headers=admin_headers)
+        bob = next(user for user in users_res.json() if user["username"] == "bob")
+
+        disable_res = self.client.patch(
+            f"/api/users/{bob['id']}",
+            json={"disabled": True},
+            headers=admin_headers,
+        )
+        self.assertEqual(disable_res.status_code, 200)
+        self.assertTrue(disable_res.json()["disabled"])
+
+        disabled_login = self.client.post("/api/auth/login", json={"username": "bob", "password": "password123"})
+        self.assertEqual(disabled_login.status_code, 403)
+
+        reset_res = self.client.post(
+            f"/api/users/{bob['id']}/reset-password",
+            json={"password": "newpassword123"},
+            headers=admin_headers,
+        )
+        self.assertEqual(reset_res.status_code, 200)
+
+        enable_res = self.client.patch(
+            f"/api/users/{bob['id']}",
+            json={"disabled": False},
+            headers=admin_headers,
+        )
+        self.assertEqual(enable_res.status_code, 200)
+
+        new_login = self.client.post("/api/auth/login", json={"username": "bob", "password": "newpassword123"})
+        self.assertEqual(new_login.status_code, 200)
+
+        delete_res = self.client.delete(f"/api/users/{bob['id']}", headers=admin_headers)
+        self.assertEqual(delete_res.status_code, 200)
+
+        users_after = self.client.get("/api/users", headers=admin_headers)
+        self.assertNotIn("bob", {user["username"] for user in users_after.json()})
+
+    def test_admin_cannot_disable_or_delete_self(self):
+        admin_headers = self.auth_headers("admin")
+        users_res = self.client.get("/api/users", headers=admin_headers)
+        admin = next(user for user in users_res.json() if user["username"] == "admin")
+
+        disable_res = self.client.patch(
+            f"/api/users/{admin['id']}",
+            json={"disabled": True},
+            headers=admin_headers,
+        )
+        self.assertEqual(disable_res.status_code, 400)
+
+        delete_res = self.client.delete(f"/api/users/{admin['id']}", headers=admin_headers)
+        self.assertEqual(delete_res.status_code, 400)
+
+    def test_bootstrap_admin_user_creates_initial_admin_only_once(self):
+        original_username = config.BOOTSTRAP_ADMIN_USERNAME
+        original_password = config.BOOTSTRAP_ADMIN_PASSWORD
+        config.BOOTSTRAP_ADMIN_USERNAME = "admin"
+        config.BOOTSTRAP_ADMIN_PASSWORD = "admin123"
+        try:
+            with self.TestingSessionLocal() as db:
+                bootstrap_admin_user(db)
+                bootstrap_admin_user(db)
+                users = db.query(User).all()
+                self.assertEqual(len(users), 1)
+                self.assertEqual(users[0].username, "admin")
+                self.assertTrue(users[0].is_admin)
+                self.assertFalse(users[0].disabled)
+        finally:
+            config.BOOTSTRAP_ADMIN_USERNAME = original_username
+            config.BOOTSTRAP_ADMIN_PASSWORD = original_password
 
 
 if __name__ == "__main__":

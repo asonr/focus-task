@@ -68,7 +68,7 @@ if [ "$FOCUS_TASK_RUN_LEGACY_MIGRATION" = "1" ]; then
     exit 1
   }
 fi
-"$PYTHON_BIN" -m uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" >> "$SCRIPT_DIR/backend.log" 2>&1 &
+"$PYTHON_BIN" -m uvicorn main:app --host 0.0.0.0 --port "$BACKEND_PORT" >> "$SCRIPT_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 echo "$BACKEND_PID" >> "$PID_FILE"
 echo -e "${BLUE}   后端 PID: $BACKEND_PID${NC}"
@@ -101,12 +101,15 @@ for i in $(seq 1 10); do
   [ $i -eq 10 ] && echo -e "${YELLOW}   ⚠ 前端可能启动失败，请查看 frontend.log${NC}"
 done
 
+LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || echo '未检测到')"
+
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}   服务已启动！${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo -e "  后端:  ${BLUE}http://127.0.0.1:$BACKEND_PORT${NC}"
 echo -e "  前端:  ${BLUE}http://localhost:1420${NC}"
+echo -e "  局域网: ${BLUE}http://$LAN_IP:1420${NC}"
 echo -e "  日志:  $SCRIPT_DIR/backend.log / frontend.log"
 echo ""
 echo -e "${YELLOW}按 Ctrl+C 停止所有服务${NC}"

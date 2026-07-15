@@ -5,7 +5,22 @@
 import type { Task } from '@/stores/taskStore'
 import { loadAuthState } from '@/utils/secureStorage'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8765'
+export interface UserAccount {
+  id: number
+  username: string
+  isAdmin: boolean
+  disabled: boolean
+  createdAt: string
+  taskCount: number
+}
+
+// ─── API base URL ───
+// Tauri desktop: always localhost (local process)
+// Browser (LAN access): use window.location.hostname so LAN clients reach the backend
+// Override via VITE_API_BASE env if needed
+const isTauri = '__TAURI_INTERNALS__' in window
+const dynamicHost = isTauri ? '127.0.0.1' : window.location.hostname
+const API_BASE = import.meta.env.VITE_API_BASE || `http://${dynamicHost}:8765`
 const LOCAL_BACKEND = /^http:\/\/(127\.0\.0\.1|localhost):8765$/.test(API_BASE)
 const STARTUP_RETRY_DELAYS = [150, 250, 400, 650, 1000, 1500]
 
@@ -57,10 +72,54 @@ function formatApiError(err: any): string {
   }
 
   if (typeof detail === 'string' && detail.trim()) {
-    return detail
+    return translateApiMessage(detail)
   }
 
-  return err?.message || '请求失败'
+  return translateApiMessage(err?.message || '请求失败')
+}
+
+function translateApiMessage(message: string): string {
+  const normalized = message.trim()
+  const lower = normalized.toLowerCase()
+
+  if (lower === 'not authenticated' || lower.includes('could not validate credentials')) {
+    return '登录状态已失效，请重新登录'
+  }
+  if (lower.includes('invalid credentials')) {
+    return '用户名或密码不正确'
+  }
+  if (lower.includes('user account is disabled')) {
+    return '该账号已被禁用，请联系管理员'
+  }
+  if (lower.includes('admin privileges required')) {
+    return '当前账号没有管理员权限'
+  }
+  if (lower.includes('username already registered')) {
+    return '用户名已被注册'
+  }
+  if (lower.includes('user not found')) {
+    return '用户不存在'
+  }
+  if (lower.includes('cannot disable your own account')) {
+    return '不能禁用当前登录账号'
+  }
+  if (lower.includes('cannot remove your own admin privileges')) {
+    return '不能取消当前账号的管理员权限'
+  }
+  if (lower.includes('cannot delete your own account')) {
+    return '不能删除当前登录账号'
+  }
+  if (lower.includes('at least one active admin is required')) {
+    return '至少需要保留一个可用的管理员账号'
+  }
+  if (lower.includes('task not found')) {
+    return '任务不存在'
+  }
+  if (lower.includes('task with this client_id already exists')) {
+    return '任务已存在'
+  }
+
+  return normalized || '请求失败'
 }
 
 // ─── HTTP helpers ───
@@ -121,6 +180,23 @@ export async function login(username: string, password: string): Promise<{ acces
 
 export async function getMe() {
   return request('GET', '/api/auth/me')
+}
+
+// ─── User Admin API ───
+export async function listUsers(): Promise<UserAccount[]> {
+  return request('GET', '/api/users')
+}
+
+export async function updateUser(userId: number, updates: { isAdmin?: boolean; disabled?: boolean }): Promise<UserAccount> {
+  return request('PATCH', `/api/users/${userId}`, updates)
+}
+
+export async function resetUserPassword(userId: number, password: string): Promise<void> {
+  return request('POST', `/api/users/${userId}/reset-password`, { password })
+}
+
+export async function deleteUser(userId: number): Promise<{ ok: boolean; deletedTasks: number }> {
+  return request('DELETE', `/api/users/${userId}`)
 }
 
 // ─── Task API ───

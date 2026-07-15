@@ -4,8 +4,18 @@ import * as api from '@/api'
 import { useTaskStore } from './taskStore'
 import { useAuthStore } from './authStore'
 
+const LAST_SYNC_KEY_PREFIX = 'focus-task-last-sync'
+
+function normalizeOwner(username: string) {
+  return username.trim().toLowerCase() || 'anonymous'
+}
+
+function lastSyncKeyFor(username: string) {
+  return `${LAST_SYNC_KEY_PREFIX}:${encodeURIComponent(normalizeOwner(username))}`
+}
+
 export const useSyncStore = defineStore('sync', () => {
-  const lastSyncAt = ref(localStorage.getItem('focus-task-last-sync') || '')
+  const lastSyncAt = ref('')
   const syncing = ref(false)
   const syncError = ref('')
   const online = ref(navigator.onLine)
@@ -24,6 +34,7 @@ export const useSyncStore = defineStore('sync', () => {
     syncError.value = ''
     try {
       const taskStore = useTaskStore()
+      lastSyncAt.value = localStorage.getItem(lastSyncKeyFor(auth.username)) || ''
 
       // 1. Push only locally dirty tasks. Server returns canonical timestamps/ids.
       const dirtyTasks = taskStore.pendingTasks()
@@ -54,7 +65,7 @@ export const useSyncStore = defineStore('sync', () => {
       } else {
         lastSyncAt.value = new Date().toISOString()
       }
-      localStorage.setItem('focus-task-last-sync', lastSyncAt.value)
+      localStorage.setItem(lastSyncKeyFor(auth.username), lastSyncAt.value)
 
       // 4. Remove tombstones after the server has acknowledged them.
       taskStore.pruneSyncedDeleted()
@@ -69,6 +80,8 @@ export const useSyncStore = defineStore('sync', () => {
   // Auto-sync every 30 seconds when online
   let syncTimer: ReturnType<typeof setInterval> | null = null
   function startAutoSync(intervalMs = 30000) {
+    const auth = useAuthStore()
+    lastSyncAt.value = auth.isLoggedIn ? localStorage.getItem(lastSyncKeyFor(auth.username)) || '' : ''
     stopAutoSync()
     sync() // Initial sync
     syncTimer = setInterval(() => {

@@ -19,9 +19,24 @@ class UserLogin(BaseModel):
 class UserOut(BaseModel):
     id: int
     username: str
+    is_admin: bool
+    disabled: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AdminUserOut(UserOut):
+    task_count: int = 0
+
+
+class UserAdminUpdate(BaseModel):
+    is_admin: bool | None = None
+    disabled: bool | None = None
+
+
+class UserPasswordReset(BaseModel):
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=100)
 
 
 class Token(BaseModel):

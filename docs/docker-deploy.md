@@ -12,6 +12,14 @@ cp .env.docker.example .env
 ```
 
 Edit `.env` and set a long random `FOCUS_TASK_SECRET_KEY`.
+For the default local compose file, an empty database bootstraps:
+
+```text
+FOCUS_TASK_BOOTSTRAP_ADMIN_USERNAME=admin
+FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD=admin123
+```
+
+Change the password after first login from `Settings -> User Management`.
 
 ```bash
 docker compose up -d --build
@@ -71,6 +79,8 @@ Common environment variables:
 FOCUS_TASK_SECRET_KEY
 FOCUS_TASK_TOKEN_EXPIRE_MINUTES
 FOCUS_TASK_PASSWORD_MIN_LENGTH
+FOCUS_TASK_BOOTSTRAP_ADMIN_USERNAME
+FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD
 FOCUS_TASK_API_PORT
 FOCUS_TASK_WEB_PORT
 FOCUS_TASK_CORS_ORIGINS
@@ -146,9 +156,13 @@ Edit `.env`:
 
 ```text
 FOCUS_TASK_SECRET_KEY=your-long-random-secret
+FOCUS_TASK_BOOTSTRAP_ADMIN_USERNAME=admin
+FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD=your-strong-initial-admin-password
 FOCUS_TASK_API_IMAGE=ghcr.io/OWNER/REPO/focus-task-api:latest
 FOCUS_TASK_WEB_IMAGE=ghcr.io/OWNER/REPO/focus-task-web:latest
 ```
+
+The bootstrap admin is created only when the `users` table is empty. Existing databases are never overwritten.
 
 Then start:
 

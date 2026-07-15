@@ -192,4 +192,26 @@ describe('syncStore', () => {
     expect(taskStore.tasks[0].title).toBe('Server title')
     expect(taskStore.tasks[0].syncStatus).toBe('synced')
   })
+
+  it('keeps last sync cursors isolated by username', async () => {
+    const auth = useAuthStore()
+    auth.token = 'token'
+    auth.username = 'alice'
+    auth.isLoggedIn = true
+    auth.ready = true
+
+    localStorage.setItem('focus-task-last-sync:alice', '2026-06-12T01:00:00.000Z')
+    localStorage.setItem('focus-task-last-sync:bob', '2026-06-13T01:00:00.000Z')
+    vi.mocked(api.syncPush).mockResolvedValue([])
+    vi.mocked(api.syncPull).mockResolvedValue([])
+
+    const syncStore = useSyncStore()
+    await syncStore.sync()
+
+    auth.username = 'bob'
+    await syncStore.sync()
+
+    expect(vi.mocked(api.syncPull).mock.calls[0][0]).toBe('2026-06-12T01:00:00.000Z')
+    expect(vi.mocked(api.syncPull).mock.calls[1][0]).toBe('2026-06-13T01:00:00.000Z')
+  })
 })

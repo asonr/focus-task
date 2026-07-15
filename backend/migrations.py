@@ -8,6 +8,17 @@ def run_migrations(engine: Engine) -> None:
         return
 
     with engine.begin() as conn:
+        user_tables = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")).fetchall()
+        if user_tables:
+            user_columns = conn.execute(text("PRAGMA table_info('users')")).mappings().all()
+            user_column_names = {column["name"] for column in user_columns}
+            if "is_admin" not in user_column_names:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
+                conn.execute(text("UPDATE users SET is_admin = 1 WHERE lower(username) = 'admin'"))
+                conn.execute(text("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)"))
+            if "disabled" not in user_column_names:
+                conn.execute(text("ALTER TABLE users ADD COLUMN disabled BOOLEAN NOT NULL DEFAULT 0"))
+
         tables = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'")).fetchall()
         if not tables:
             return

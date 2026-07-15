@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
 use tauri::Manager;
 
 const SERVICE_NAME: &str = "FocusTask";
@@ -286,7 +286,7 @@ pub fn run() {
             send_native_notification
         ])
         .setup(|app| {
-            // ─── Custom Chinese Menu for macOS ───
+            // ─── Native macOS menu ───
             #[cfg(target_os = "macos")]
             {
                 let app_menu = Submenu::with_items(
@@ -294,9 +294,13 @@ pub fn run() {
                     "Focus Task",
                     true,
                     &[
-                        &MenuItem::with_id(app, "about", "关于 Focus Task", true, None::<&str>)?,
+                        &PredefinedMenuItem::about(app, Some("关于 Focus Task"), None)?,
                         &PredefinedMenuItem::separator(app)?,
-                        &MenuItem::with_id(app, "quit", "退出 Focus Task", true, Some("Cmd+Q"))?,
+                        &PredefinedMenuItem::hide(app, Some("隐藏 Focus Task"))?,
+                        &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
+                        &PredefinedMenuItem::show_all(app, Some("全部显示"))?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::quit(app, Some("退出 Focus Task"))?,
                     ],
                 )?;
 
@@ -304,11 +308,7 @@ pub fn run() {
                     app,
                     "文件",
                     true,
-                    &[
-                        &MenuItem::with_id(app, "new_task", "新建任务", true, Some("Cmd+N"))?,
-                        &PredefinedMenuItem::separator(app)?,
-                        &MenuItem::with_id(app, "close_window", "关闭窗口", true, Some("Cmd+W"))?,
-                    ],
+                    &[&PredefinedMenuItem::close_window(app, Some("关闭窗口"))?],
                 )?;
 
                 let edit_menu = Submenu::with_items(
@@ -316,13 +316,13 @@ pub fn run() {
                     "编辑",
                     true,
                     &[
-                        &MenuItem::with_id(app, "undo", "撤销", true, Some("Cmd+Z"))?,
-                        &MenuItem::with_id(app, "redo", "重做", true, Some("Cmd+Shift+Z"))?,
+                        &PredefinedMenuItem::undo(app, Some("撤销"))?,
+                        &PredefinedMenuItem::redo(app, Some("重做"))?,
                         &PredefinedMenuItem::separator(app)?,
-                        &MenuItem::with_id(app, "cut", "剪切", true, Some("Cmd+X"))?,
-                        &MenuItem::with_id(app, "copy", "复制", true, Some("Cmd+C"))?,
-                        &MenuItem::with_id(app, "paste", "粘贴", true, Some("Cmd+V"))?,
-                        &MenuItem::with_id(app, "select_all", "全选", true, Some("Cmd+A"))?,
+                        &PredefinedMenuItem::cut(app, Some("剪切"))?,
+                        &PredefinedMenuItem::copy(app, Some("复制"))?,
+                        &PredefinedMenuItem::paste(app, Some("粘贴"))?,
+                        &PredefinedMenuItem::select_all(app, Some("全选"))?,
                     ],
                 )?;
 
@@ -330,13 +330,7 @@ pub fn run() {
                     app,
                     "视图",
                     true,
-                    &[&MenuItem::with_id(
-                        app,
-                        "fullscreen",
-                        "进入全屏幕",
-                        true,
-                        Some("Ctrl+Cmd+F"),
-                    )?],
+                    &[&PredefinedMenuItem::fullscreen(app, Some("进入全屏幕"))?],
                 )?;
 
                 let window_menu = Submenu::with_items(
@@ -344,9 +338,10 @@ pub fn run() {
                     "窗口",
                     true,
                     &[
-                        &MenuItem::with_id(app, "minimize", "最小化", true, Some("Cmd+M"))?,
+                        &PredefinedMenuItem::minimize(app, Some("最小化"))?,
+                        &PredefinedMenuItem::fullscreen(app, Some("缩放"))?,
                         &PredefinedMenuItem::separator(app)?,
-                        &MenuItem::with_id(app, "close_win", "关闭窗口", true, Some("Cmd+W"))?,
+                        &PredefinedMenuItem::bring_all_to_front(app, Some("全部移到最前"))?,
                     ],
                 )?;
 
@@ -354,13 +349,7 @@ pub fn run() {
                     app,
                     "帮助",
                     true,
-                    &[&MenuItem::with_id(
-                        app,
-                        "help",
-                        "Focus Task 帮助",
-                        true,
-                        None::<&str>,
-                    )?],
+                    &[&PredefinedMenuItem::services(app, Some("服务"))?],
                 )?;
 
                 let menu = Menu::with_items(
@@ -387,22 +376,6 @@ pub fn run() {
                 window.open_devtools();
             }
             Ok(())
-        })
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "quit" => {
-                app.exit(0);
-            }
-            "close_window" | "close_win" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.close();
-                }
-            }
-            "minimize" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.minimize();
-                }
-            }
-            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

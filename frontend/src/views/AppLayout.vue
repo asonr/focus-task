@@ -36,6 +36,13 @@
           </svg>
         </button>
       </div>
+      <div class="header-account">
+        <div class="header-user">
+          <strong>{{ auth.username || '未登录' }}</strong>
+          <span>{{ auth.isAdmin ? '管理员' : '普通用户' }}</span>
+        </div>
+        <button class="header-logout" type="button" @click="logout">退出登录</button>
+      </div>
     </header>
 
     <!-- Sidebar -->
@@ -150,7 +157,8 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, provide } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useSyncStore } from '@/stores/syncStore'
 import { useTheme } from '@/composables/useTheme'
@@ -162,8 +170,10 @@ import SummaryView from '@/views/SummaryView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 
 const store = useTaskStore()
+const auth = useAuthStore()
 const syncStore = useSyncStore()
 const route = useRoute()
+const router = useRouter()
 const panelOpen = ref(true)
 const searchInput = ref<HTMLInputElement | null>(null)
 
@@ -257,6 +267,12 @@ function ctxAction(action: string, quadrant?: number) {
 function clearDone() {
   const done = store.activeTasks.filter(t => t.done)
   done.forEach(t => store.removeTask(t.clientId))
+}
+
+async function logout() {
+  syncStore.stopAutoSync()
+  await auth.logout()
+  router.push('/login')
 }
 
 // Expose showContextMenu for child components
@@ -356,6 +372,54 @@ onUnmounted(() => {
 .btn-icon:hover { background: var(--surface-mid); color: var(--text-primary); }
 .btn-icon.btn-danger { color: oklch(58% 0.16 20); }
 .btn-icon.btn-danger:hover { background: oklch(96% 0.02 20); color: oklch(48% 0.18 20); }
+.header-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+  cursor: default;
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+.header-user {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 72px;
+  max-width: 130px;
+}
+.header-user strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+.header-user span {
+  font-size: 10px;
+  line-height: 1.15;
+  color: var(--text-muted);
+}
+.header-logout {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: oklch(50% 0.15 25);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition), border-color var(--transition);
+}
+.header-logout:hover {
+  background: oklch(96% 0.025 25);
+  border-color: oklch(88% 0.04 25);
+}
 .search-bar {
   display: flex; align-items: center; gap: 6px;
   background: var(--surface-mid); border: 1px solid var(--border-subtle);

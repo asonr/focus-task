@@ -84,19 +84,35 @@
       </svg>
       <span>设置</span>
     </div>
+
+    <div class="sidebar-account">
+      <div class="account-main">
+        <div class="account-avatar">{{ accountInitial }}</div>
+        <div class="account-copy">
+          <strong>{{ auth.username || '未登录' }}</strong>
+          <span>{{ auth.isAdmin ? '管理员' : '普通用户' }}</span>
+        </div>
+      </div>
+      <button class="logout-btn" type="button" @click="logout">
+        退出登录
+      </button>
+    </div>
   </aside>
 </template>
 
 <script setup lang="ts">
 import { computed, h } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
+import { useAuthStore } from '@/stores/authStore'
 import { toDateKey } from '@/utils/dateTime'
 import { useRoute, useRouter } from 'vue-router'
 
 const store = useTaskStore()
+const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const isSettingsRoute = computed(() => route.path === '/settings')
+const accountInitial = computed(() => (auth.username || '?').slice(0, 1).toUpperCase())
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -148,6 +164,11 @@ function openSummary() {
   if (route.path === '/settings') {
     router.push('/')
   }
+}
+
+async function logout() {
+  await auth.logout()
+  router.push('/login')
 }
 </script>
 
@@ -201,5 +222,73 @@ function openSummary() {
 .sidebar-item.active .sidebar-badge {
   background: oklch(88% 0.04 240);
   color: oklch(35% 0.1 240);
+}
+
+.sidebar-account {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.account-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.account-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: oklch(95% 0.018 240);
+  color: oklch(38% 0.11 240);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.account-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.account-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.account-copy span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.logout-btn {
+  height: 30px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: oklch(50% 0.15 25);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.logout-btn:hover {
+  background: oklch(96% 0.025 25);
+  border-color: oklch(88% 0.04 25);
 }
 </style>

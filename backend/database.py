@@ -28,6 +28,10 @@ def get_db():
 
 def init_db():
     run_startup_migrations()
+    from bootstrap import bootstrap_admin_user
+
+    with SessionLocal() as db:
+        bootstrap_admin_user(db)
 
 
 def _runtime_root() -> Path:

@@ -15,6 +15,8 @@ def list_users() -> int:
             select(
                 User.id,
                 User.username,
+                User.is_admin,
+                User.disabled,
                 User.created_at,
                 func.count(Task.id).label("task_count"),
             )
@@ -29,7 +31,9 @@ def list_users() -> int:
 
     for row in rows:
         created_at = row.created_at.isoformat(sep=" ", timespec="seconds")
-        print(f"id={row.id} username={row.username} created_at={created_at} tasks={row.task_count}")
+        role = "admin" if row.is_admin else "user"
+        status = "disabled" if row.disabled else "active"
+        print(f"id={row.id} username={row.username} role={role} status={status} created_at={created_at} tasks={row.task_count}")
     return 0
 
 
