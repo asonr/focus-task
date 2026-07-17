@@ -15,8 +15,8 @@ CORS_ORIGINS = [
     "https://tauri.localhost",
 ]
 
-# Allow any origin on port 1420 (dev server) — covers localhost and LAN IPs
-CORS_ORIGIN_REGEX = r"http://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):1420"
+# Allow any origin on common ports (dev 1420, Docker web 8380/8080) — covers localhost and LAN IPs
+CORS_ORIGIN_REGEX = r"http://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):(1420|8380|8080|80)"
 
 extra_origins = os.getenv("FOCUS_TASK_CORS_ORIGINS", "")
 if extra_origins.strip():

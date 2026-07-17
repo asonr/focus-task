@@ -1,8 +1,9 @@
 services:
   focus-task-api:
-    image: ${FOCUS_TASK_API_IMAGE:?Set FOCUS_TASK_API_IMAGE in .env, e.g. ghcr.io/yourname/focus-task/focus-task-api:latest}
+    image: ${FOCUS_TASK_API_IMAGE:?Set FOCUS_TASK_API_IMAGE in .env, e.g. ghcr.io/vipuncle2026/focus-task/focus-task-api:latest}
     container_name: focus-task-api
     environment:
+      FOCUS_TASK_BACKEND_HOST: "0.0.0.0"
       FOCUS_TASK_BACKEND_PORT: 8765
       FOCUS_TASK_DATABASE_URL: sqlite:////data/todo.db
       FOCUS_TASK_SECRET_KEY: ${FOCUS_TASK_SECRET_KEY:?set FOCUS_TASK_SECRET_KEY in .env}
@@ -17,14 +18,14 @@ services:
       - focus-task-data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=2)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)\" || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   focus-task-web:
-    image: ${FOCUS_TASK_WEB_IMAGE:?Set FOCUS_TASK_WEB_IMAGE in .env, e.g. ghcr.io/yourname/focus-task/focus-task-web:latest}
+    image: ${FOCUS_TASK_WEB_IMAGE:?Set FOCUS_TASK_WEB_IMAGE in .env, e.g. ghcr.io/vipuncle2026/focus-task/focus-task-web:latest}
     container_name: focus-task-web
     depends_on:
       focus-task-api:
