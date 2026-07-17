@@ -23,6 +23,18 @@ def run_migrations(engine: Engine) -> None:
         if not tables:
             return
 
+        task_columns = conn.execute(text("PRAGMA table_info('tasks')")).mappings().all()
+        task_column_names = {column["name"] for column in task_columns}
+        schedule_columns = {
+            "start_at": "VARCHAR(20) NOT NULL DEFAULT ''",
+            "notify_on_start": "BOOLEAN NOT NULL DEFAULT 1",
+            "notify_on_due": "BOOLEAN NOT NULL DEFAULT 1",
+            "notify_on_overdue": "BOOLEAN NOT NULL DEFAULT 1",
+        }
+        for column_name, definition in schedule_columns.items():
+            if column_name not in task_column_names:
+                conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {column_name} {definition}"))
+
         indexes = conn.execute(text("PRAGMA index_list('tasks')")).mappings().all()
         has_global_client_unique = False
         has_user_client_unique = False
@@ -52,9 +64,13 @@ def run_migrations(engine: Engine) -> None:
                 title VARCHAR(500) NOT NULL,
                 notes TEXT NOT NULL,
                 done BOOLEAN NOT NULL,
+                start_at VARCHAR(20) NOT NULL,
                 due VARCHAR(20) NOT NULL,
                 tag VARCHAR(100) NOT NULL,
                 repeat VARCHAR(20) NOT NULL,
+                notify_on_start BOOLEAN NOT NULL,
+                notify_on_due BOOLEAN NOT NULL,
+                notify_on_overdue BOOLEAN NOT NULL,
                 show_in_focus BOOLEAN NOT NULL,
                 sort_order FLOAT NOT NULL,
                 created_at DATETIME NOT NULL,
@@ -67,12 +83,14 @@ def run_migrations(engine: Engine) -> None:
         """))
         conn.execute(text("""
             INSERT INTO tasks (
-                id, user_id, client_id, quadrant, title, notes, done, due, tag, repeat,
-                show_in_focus, sort_order, created_at, updated_at, done_at, deleted
+                id, user_id, client_id, quadrant, title, notes, done, start_at, due, tag, repeat,
+                notify_on_start, notify_on_due, notify_on_overdue, show_in_focus,
+                sort_order, created_at, updated_at, done_at, deleted
             )
             SELECT
-                id, user_id, client_id, quadrant, title, notes, done, due, tag, repeat,
-                show_in_focus, sort_order, created_at, updated_at, done_at, deleted
+                id, user_id, client_id, quadrant, title, notes, done, start_at, due, tag, repeat,
+                notify_on_start, notify_on_due, notify_on_overdue, show_in_focus,
+                sort_order, created_at, updated_at, done_at, deleted
             FROM tasks_old
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tasks_id ON tasks (id)"))

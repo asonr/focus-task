@@ -226,6 +226,12 @@ export const useTaskStore = defineStore('tasks', () => {
     }
   }
 
+  async function reloadTasks() {
+    tasks.value = []
+    saveLocal()
+    await fetchTasks()
+  }
+
   async function addTask(quadrant: number, title: string) {
     const clientId = createClientId()
     const now = new Date().toISOString()
@@ -392,6 +398,7 @@ export const useTaskStore = defineStore('tasks', () => {
     resolveConflict,
     reorderTasks,
     fetchTasks,
+    reloadTasks,
     addTask,
     updateTask,
     toggleDone,

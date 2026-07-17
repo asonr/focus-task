@@ -7,7 +7,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from auth import hash_password
@@ -16,12 +16,18 @@ import config
 from database import Base, get_db
 from main import app
 from models import User
+from routers import backups as backups_router
+from migrations import run_migrations
 
 
 class SyncApiTest(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         db_path = Path(self.tmpdir.name) / "test.db"
+        self.original_database_url = config.DATABASE_URL
+        self.original_backup_dir = config.BACKUP_DIR
+        config.DATABASE_URL = f"sqlite:///{db_path}"
+        config.BACKUP_DIR = str(Path(self.tmpdir.name) / "backups")
         engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
         TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         Base.metadata.create_all(bind=engine)
@@ -34,11 +40,16 @@ class SyncApiTest(unittest.TestCase):
                 db.close()
 
         self.TestingSessionLocal = TestingSessionLocal
+        self.original_backup_engine = backups_router.engine
+        backups_router.engine = engine
         app.dependency_overrides[get_db] = override_get_db
         self.client = TestClient(app)
 
     def tearDown(self):
         app.dependency_overrides.clear()
+        config.DATABASE_URL = self.original_database_url
+        config.BACKUP_DIR = self.original_backup_dir
+        backups_router.engine = self.original_backup_engine
         self.tmpdir.cleanup()
 
     def auth_headers(self, username="alice"):
@@ -133,6 +144,124 @@ class SyncApiTest(unittest.TestCase):
         self.assertEqual(bob_res.status_code, 200)
         self.assertEqual(alice_res.json()[0]["title"], "Alice")
         self.assertEqual(bob_res.json()[0]["title"], "Bob")
+
+    def test_user_backup_export_and_merge_are_scoped_to_current_user(self):
+        alice_headers = self.auth_headers("alice")
+        bob_headers = self.auth_headers("bob")
+        self.client.post(
+            "/api/tasks/sync/push",
+            json={"tasks": [self.task_payload(client_id="alice-task", title="Alice")]},
+            headers=alice_headers,
+        )
+        self.client.post(
+            "/api/tasks/sync/push",
+            json={"tasks": [self.task_payload(client_id="bob-task", title="Bob")]},
+            headers=bob_headers,
+        )
+
+        export_res = self.client.get("/api/backups/user", headers=alice_headers)
+        self.assertEqual(export_res.status_code, 200)
+        backup = export_res.json()
+        self.assertEqual(backup["format"], "focus-task-backup")
+        self.assertEqual(backup["version"], 1)
+        self.assertEqual([task["client_id"] for task in backup["tasks"]], ["alice-task"])
+
+        backup["tasks"].append(self.task_payload(client_id="imported-task", title="Imported"))
+        import_res = self.client.post(
+            "/api/backups/user/import",
+            json={"mode": "merge", "backup": backup},
+            headers=alice_headers,
+        )
+        self.assertEqual(import_res.status_code, 200)
+        self.assertEqual(import_res.json()["created"], 1)
+
+        alice_tasks = self.client.get("/api/tasks?include_deleted=true", headers=alice_headers).json()
+        bob_tasks = self.client.get("/api/tasks?include_deleted=true", headers=bob_headers).json()
+        self.assertEqual({task["client_id"] for task in alice_tasks}, {"alice-task", "imported-task"})
+        self.assertEqual({task["client_id"] for task in bob_tasks}, {"bob-task"})
+
+    def test_user_backup_replace_removes_only_current_users_tasks(self):
+        alice_headers = self.auth_headers("alice")
+        bob_headers = self.auth_headers("bob")
+        self.client.post(
+            "/api/tasks/sync/push",
+            json={"tasks": [self.task_payload(client_id="old-alice")]},
+            headers=alice_headers,
+        )
+        self.client.post(
+            "/api/tasks/sync/push",
+            json={"tasks": [self.task_payload(client_id="bob-task")]},
+            headers=bob_headers,
+        )
+        backup = {
+            "format": "focus-task-backup",
+            "version": 1,
+            "exported_at": "2026-07-17T00:00:00Z",
+            "username": "alice",
+            "tasks": [self.task_payload(client_id="restored-alice", title="Restored")],
+        }
+
+        replace_res = self.client.post(
+            "/api/backups/user/import",
+            json={"mode": "replace", "backup": backup},
+            headers=alice_headers,
+        )
+        self.assertEqual(replace_res.status_code, 200)
+        self.assertEqual(replace_res.json()["removed"], 1)
+        alice_tasks = self.client.get("/api/tasks?include_deleted=true", headers=alice_headers).json()
+        bob_tasks = self.client.get("/api/tasks?include_deleted=true", headers=bob_headers).json()
+        self.assertEqual([task["client_id"] for task in alice_tasks], ["restored-alice"])
+        self.assertEqual([task["client_id"] for task in bob_tasks], ["bob-task"])
+
+    def test_regular_user_cannot_manage_server_snapshots(self):
+        self.auth_headers("admin")
+        bob_headers = self.auth_headers("bob")
+        res = self.client.get("/api/backups/server", headers=bob_headers)
+        self.assertEqual(res.status_code, 403)
+
+    def test_admin_can_create_download_and_delete_server_snapshot(self):
+        admin_headers = self.auth_headers("admin")
+        create_res = self.client.post("/api/backups/server", headers=admin_headers)
+        self.assertEqual(create_res.status_code, 201)
+        snapshot = create_res.json()
+        self.assertTrue(snapshot["name"].endswith(".db"))
+        self.assertGreater(snapshot["size"], 0)
+
+        list_res = self.client.get("/api/backups/server", headers=admin_headers)
+        self.assertEqual(list_res.status_code, 200)
+        self.assertEqual([item["name"] for item in list_res.json()], [snapshot["name"]])
+
+        download_res = self.client.get(f"/api/backups/server/{snapshot['name']}", headers=admin_headers)
+        self.assertEqual(download_res.status_code, 200)
+        self.assertGreater(len(download_res.content), 0)
+
+        delete_res = self.client.delete(f"/api/backups/server/{snapshot['name']}", headers=admin_headers)
+        self.assertEqual(delete_res.status_code, 200)
+        self.assertEqual(self.client.get("/api/backups/server", headers=admin_headers).json(), [])
+
+    def test_admin_restore_rolls_back_database_and_creates_safety_snapshot(self):
+        admin_headers = self.auth_headers("admin")
+        create_res = self.client.post("/api/backups/server", headers=admin_headers)
+        snapshot_name = create_res.json()["name"]
+        snapshot_bytes = self.client.get(f"/api/backups/server/{snapshot_name}", headers=admin_headers).content
+
+        self.client.post(
+            "/api/tasks/sync/push",
+            json={"tasks": [self.task_payload(client_id="after-snapshot")]},
+            headers=admin_headers,
+        )
+        self.assertEqual(len(self.client.get("/api/tasks", headers=admin_headers).json()), 1)
+
+        restore_res = self.client.put(
+            "/api/backups/server/restore",
+            content=snapshot_bytes,
+            headers={**admin_headers, "Content-Type": "application/vnd.sqlite3"},
+        )
+        self.assertEqual(restore_res.status_code, 200)
+        self.assertTrue(restore_res.json()["safety_snapshot"].startswith("before-restore-"))
+        self.assertEqual(self.client.get("/api/tasks", headers=admin_headers).json(), [])
+        snapshots = self.client.get("/api/backups/server", headers=admin_headers).json()
+        self.assertEqual(len(snapshots), 2)
 
     def test_login_accepts_legacy_short_password_accounts(self):
         with self.TestingSessionLocal() as db:
@@ -297,6 +426,46 @@ class SyncApiTest(unittest.TestCase):
         finally:
             config.BOOTSTRAP_ADMIN_USERNAME = original_username
             config.BOOTSTRAP_ADMIN_PASSWORD = original_password
+
+    def test_legacy_migration_adds_schedule_and_notification_columns(self):
+        legacy_path = Path(self.tmpdir.name) / "legacy.db"
+        legacy_engine = create_engine(f"sqlite:///{legacy_path}")
+        with legacy_engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE tasks (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    client_id VARCHAR(36) NOT NULL UNIQUE,
+                    quadrant INTEGER NOT NULL DEFAULT 1,
+                    title VARCHAR(500) NOT NULL DEFAULT '',
+                    notes TEXT NOT NULL DEFAULT '',
+                    done BOOLEAN NOT NULL DEFAULT 0,
+                    due VARCHAR(20) NOT NULL DEFAULT '',
+                    tag VARCHAR(100) NOT NULL DEFAULT '',
+                    repeat VARCHAR(20) NOT NULL DEFAULT 'none',
+                    show_in_focus BOOLEAN NOT NULL DEFAULT 0,
+                    sort_order FLOAT NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    done_at VARCHAR(30) NOT NULL DEFAULT '',
+                    deleted BOOLEAN NOT NULL DEFAULT 0
+                )
+            """))
+
+        run_migrations(legacy_engine)
+        columns = {column["name"] for column in inspect(legacy_engine).get_columns("tasks")}
+        self.assertTrue({
+            "start_at", "notify_on_start", "notify_on_due", "notify_on_overdue"
+        }.issubset(columns))
+        unique_constraints = inspect(legacy_engine).get_unique_constraints("tasks")
+        unique_indexes = inspect(legacy_engine).get_indexes("tasks")
+        unique_column_sets = {
+            tuple(item["column_names"])
+            for item in [*unique_constraints, *unique_indexes]
+            if item.get("unique", True)
+        }
+        self.assertIn(("user_id", "client_id"), unique_column_sets)
+        legacy_engine.dispose()
 
 
 if __name__ == "__main__":

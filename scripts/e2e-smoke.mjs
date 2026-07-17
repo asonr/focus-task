@@ -10,7 +10,7 @@ const port = Number(process.env.FOCUS_TASK_E2E_PORT || 8899)
 const baseUrl = `http://127.0.0.1:${port}`
 const python = process.env.FOCUS_TASK_PYTHON || '/Library/Frameworks/Python.framework/Versions/3.14/bin/python3.14'
 const useSourceBackend = process.env.FOCUS_TASK_E2E_SOURCE === '1'
-const backendBinary = path.join(backendDir, 'dist', 'focus-task-backend')
+const backendBinary = path.join(backendDir, 'dist', 'focus-task-backend', 'focus-task-backend')
 const tempDir = await mkdtemp(path.join(tmpdir(), 'focus-task-e2e-'))
 const dbPath = path.join(tempDir, 'todo.db')
 

@@ -1,5 +1,6 @@
 """Pydantic schemas for request/response validation."""
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, Field
 
 from config import PASSWORD_MIN_LENGTH
@@ -129,3 +130,29 @@ class SyncPush(BaseModel):
 
 class SyncPull(BaseModel):
     since: datetime | None = None
+
+
+# ─── Backup ───
+class TaskBackup(TaskSyncIn):
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class UserBackup(BaseModel):
+    format: Literal["focus-task-backup"] = "focus-task-backup"
+    version: Literal[1] = 1
+    exported_at: datetime
+    username: str
+    tasks: list[TaskBackup]
+
+
+class UserBackupImport(BaseModel):
+    mode: Literal["merge", "replace"] = "merge"
+    backup: UserBackup
+
+
+class UserBackupImportResult(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    removed: int

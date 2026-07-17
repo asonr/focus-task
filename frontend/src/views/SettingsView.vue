@@ -129,6 +129,84 @@
         </div>
       </article>
 
+      <article class="settings-card backup-card">
+        <div class="card-head">
+          <div>
+            <span class="card-kicker">数据安全</span>
+            <h2>备份与恢复</h2>
+          </div>
+          <span class="permission-badge granted">JSON v1</span>
+        </div>
+
+        <div class="backup-columns">
+          <section class="backup-section">
+            <div class="backup-section-head">
+              <div>
+                <strong>当前账号</strong>
+                <p>导出或恢复 {{ auth.username }} 的全部任务。</p>
+              </div>
+            </div>
+            <div class="permission-actions">
+              <button class="primary-btn" :disabled="backupBusy" @click="exportCurrentUser">
+                {{ backupBusy ? '处理中…' : '导出 JSON' }}
+              </button>
+              <button class="secondary-btn" :disabled="backupBusy" @click="userBackupInput?.click()">选择备份</button>
+              <input ref="userBackupInput" class="hidden-file" type="file" accept="application/json,.json" @change="selectUserBackup" />
+            </div>
+
+            <div v-if="pendingUserBackup" class="restore-preview">
+              <div>
+                <strong>{{ pendingUserBackup.tasks.length }} 项任务</strong>
+                <span>{{ pendingUserBackup.username }} · {{ formatDateTime(pendingUserBackup.exportedAt) }}</span>
+              </div>
+              <div class="permission-actions">
+                <button class="primary-btn" :disabled="backupBusy" @click="restoreUserBackup('merge')">合并导入</button>
+                <button class="secondary-btn danger-text" :disabled="backupBusy" @click="restoreUserBackup('replace')">覆盖当前账号</button>
+                <button class="secondary-btn" :disabled="backupBusy" @click="pendingUserBackup = null">取消</button>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="auth.isAdmin" class="backup-section server-backup-section">
+            <div class="backup-section-head">
+              <div>
+                <strong>服务器快照</strong>
+                <p>完整保存用户、密码哈希和任务数据库。</p>
+              </div>
+              <button class="secondary-btn" :disabled="serverBusy" @click="loadSnapshots">刷新</button>
+            </div>
+            <div class="permission-actions">
+              <button class="primary-btn" :disabled="serverBusy" @click="createSnapshot">创建快照</button>
+              <button class="secondary-btn danger-text" :disabled="serverBusy" @click="serverBackupInput?.click()">上传并恢复</button>
+              <input ref="serverBackupInput" class="hidden-file" type="file" accept=".db,application/vnd.sqlite3" @change="restoreServerBackup" />
+            </div>
+
+            <div class="snapshot-list">
+              <div v-if="snapshots.length === 0" class="snapshot-empty">暂无服务器快照</div>
+              <div v-for="snapshot in snapshots" :key="snapshot.name" class="snapshot-row">
+                <div>
+                  <strong>{{ snapshot.name }}</strong>
+                  <span>{{ formatBytes(snapshot.size) }} · {{ formatDateTime(snapshot.createdAt) }}</span>
+                </div>
+                <div class="snapshot-actions">
+                  <template v-if="pendingDeleteSnapshotName === snapshot.name">
+                    <button class="mini-btn" :disabled="serverBusy" @click="pendingDeleteSnapshotName = ''">取消</button>
+                    <button class="mini-btn danger confirm-danger" :disabled="serverBusy" @click="confirmDeleteSnapshot(snapshot)">确认删除</button>
+                  </template>
+                  <template v-else>
+                    <button class="mini-btn" :disabled="serverBusy" @click="downloadSnapshot(snapshot)">下载</button>
+                    <button class="mini-btn danger" :disabled="serverBusy" @click="pendingDeleteSnapshotName = snapshot.name">删除</button>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <p v-if="backupError" class="settings-error">{{ backupError }}</p>
+        <p v-if="backupMessage" class="settings-success">{{ backupMessage }}</p>
+      </article>
+
       <article class="settings-card user-admin-card">
         <div class="card-head">
           <div>
@@ -222,15 +300,18 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import * as api from '@/api'
-import type { UserAccount } from '@/api'
+import type { ServerSnapshot, UserAccount, UserBackup } from '@/api'
 import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore, type ReminderLeadMinutes } from '@/stores/settingsStore'
+import { useTaskStore } from '@/stores/taskStore'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 
 const settings = useSettingsStore()
 const theme = useTheme()
 const auth = useAuthStore()
+const taskStore = useTaskStore()
 
 const users = ref<UserAccount[]>([])
 const usersLoading = ref(false)
@@ -239,6 +320,15 @@ const usersMessage = ref('')
 const actionBusy = ref(false)
 const resetUserId = ref<number | null>(null)
 const resetPassword = ref('')
+const backupBusy = ref(false)
+const serverBusy = ref(false)
+const backupError = ref('')
+const backupMessage = ref('')
+const pendingUserBackup = ref<UserBackup | null>(null)
+const snapshots = ref<ServerSnapshot[]>([])
+const userBackupInput = ref<HTMLInputElement | null>(null)
+const serverBackupInput = ref<HTMLInputElement | null>(null)
+const pendingDeleteSnapshotName = ref('')
 
 const themeOptions: { label: string; icon: string; value: ThemeMode }[] = [
   { label: '亮色', icon: '☀️', value: 'light' },
@@ -294,6 +384,168 @@ async function sendTestNotification() {
 
 function formatDate(value: string) {
   return value ? new Date(value).toLocaleDateString() : ''
+}
+
+function formatDateTime(value: string) {
+  return value ? new Date(value).toLocaleString() : ''
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+function isTauriRuntime() {
+  return '__TAURI_INTERNALS__' in window || '__TAURI__' in window
+}
+
+async function saveJsonFile(filename: string, content: string): Promise<boolean> {
+  if (isTauriRuntime()) {
+    return invoke<boolean>('save_text_file', { filename, content })
+  }
+  downloadBlob(new Blob([content], { type: 'application/json' }), filename)
+  return true
+}
+
+function showBackupMessage(message: string) {
+  backupMessage.value = message
+  window.setTimeout(() => {
+    if (backupMessage.value === message) backupMessage.value = ''
+  }, 4000)
+}
+
+async function exportCurrentUser() {
+  backupBusy.value = true
+  backupError.value = ''
+  try {
+    const backup = await api.exportUserBackup()
+    const date = new Date().toISOString().slice(0, 10)
+    const saved = await saveJsonFile(
+      `focus-task-${auth.username}-${date}.json`,
+      JSON.stringify(backup, null, 2),
+    )
+    if (saved) showBackupMessage(`已导出 ${backup.tasks.length} 项任务`)
+  } catch (e: any) {
+    backupError.value = e?.message || '数据导出失败'
+  } finally {
+    backupBusy.value = false
+  }
+}
+
+async function selectUserBackup(event: Event) {
+  backupError.value = ''
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    const parsed = JSON.parse(await file.text()) as UserBackup
+    if (parsed.format !== 'focus-task-backup' || parsed.version !== 1 || !Array.isArray(parsed.tasks)) {
+      throw new Error('备份格式或版本不受支持')
+    }
+    pendingUserBackup.value = parsed
+  } catch (e: any) {
+    backupError.value = e?.message || '无法读取备份文件'
+  }
+}
+
+async function restoreUserBackup(mode: 'merge' | 'replace') {
+  if (!pendingUserBackup.value) return
+  if (mode === 'replace' && !window.confirm('覆盖恢复会删除当前账号已有任务，然后导入备份。确定继续？')) return
+  backupBusy.value = true
+  backupError.value = ''
+  try {
+    const result = await api.importUserBackup(pendingUserBackup.value, mode)
+    await taskStore.reloadTasks()
+    pendingUserBackup.value = null
+    showBackupMessage(`恢复完成：新增 ${result.created}，更新 ${result.updated}，跳过 ${result.skipped}`)
+  } catch (e: any) {
+    backupError.value = e?.message || '数据恢复失败'
+  } finally {
+    backupBusy.value = false
+  }
+}
+
+async function loadSnapshots() {
+  if (!auth.isAdmin) return
+  serverBusy.value = true
+  backupError.value = ''
+  try {
+    snapshots.value = await api.listServerSnapshots()
+  } catch (e: any) {
+    backupError.value = e?.message || '快照列表加载失败'
+  } finally {
+    serverBusy.value = false
+  }
+}
+
+async function createSnapshot() {
+  serverBusy.value = true
+  backupError.value = ''
+  try {
+    const snapshot = await api.createServerSnapshot()
+    snapshots.value = [snapshot, ...snapshots.value.filter(item => item.name !== snapshot.name)]
+    showBackupMessage(`服务器快照已创建：${snapshot.name}`)
+  } catch (e: any) {
+    backupError.value = e?.message || '创建服务器快照失败'
+  } finally {
+    serverBusy.value = false
+  }
+}
+
+async function downloadSnapshot(snapshot: ServerSnapshot) {
+  serverBusy.value = true
+  backupError.value = ''
+  try {
+    downloadBlob(await api.downloadServerSnapshot(snapshot.name), snapshot.name)
+  } catch (e: any) {
+    backupError.value = e?.message || '快照下载失败'
+  } finally {
+    serverBusy.value = false
+  }
+}
+
+async function confirmDeleteSnapshot(snapshot: ServerSnapshot) {
+  serverBusy.value = true
+  backupError.value = ''
+  try {
+    await api.deleteServerSnapshot(snapshot.name)
+    snapshots.value = snapshots.value.filter(item => item.name !== snapshot.name)
+    pendingDeleteSnapshotName.value = ''
+    showBackupMessage('服务器快照已删除')
+  } catch (e: any) {
+    backupError.value = e?.message || '快照删除失败'
+  } finally {
+    serverBusy.value = false
+  }
+}
+
+async function restoreServerBackup(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !window.confirm(`从 ${file.name} 恢复整个服务器数据库？系统会先自动创建当前数据快照。`)) return
+  serverBusy.value = true
+  backupError.value = ''
+  try {
+    const result = await api.restoreServerSnapshot(file)
+    showBackupMessage(`服务器已恢复，恢复前快照：${result.safetySnapshot}`)
+    await loadSnapshots()
+    await taskStore.reloadTasks()
+  } catch (e: any) {
+    backupError.value = e?.message || '服务器恢复失败'
+  } finally {
+    serverBusy.value = false
+  }
 }
 
 function isSelf(userId: number) {
@@ -388,6 +640,7 @@ async function removeUser(user: UserAccount) {
 
 onMounted(() => {
   loadUsers()
+  loadSnapshots()
 })
 </script>
 
@@ -455,6 +708,114 @@ onMounted(() => {
 
 .user-admin-card {
   grid-column: 1 / -1;
+}
+
+.backup-card {
+  grid-column: 1 / -1;
+}
+
+.backup-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.backup-section {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.backup-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.backup-section-head strong,
+.restore-preview strong,
+.snapshot-row strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.snapshot-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+}
+
+.backup-section-head p {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hidden-file {
+  display: none;
+}
+
+.restore-preview {
+  padding: 10px;
+  border: 1px solid oklch(58% 0.11 240 / 0.28);
+  border-radius: 8px;
+  background: oklch(97% 0.012 240);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.restore-preview > div:first-child,
+.snapshot-row > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.restore-preview span,
+.snapshot-row span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.danger-text {
+  color: oklch(50% 0.17 25);
+}
+
+.snapshot-list {
+  max-height: 190px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.snapshot-row {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.snapshot-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshot-empty {
+  padding: 16px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .card-head {
@@ -762,6 +1123,10 @@ onMounted(() => {
   }
 
   .time-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .backup-columns {
     grid-template-columns: 1fr;
   }
 

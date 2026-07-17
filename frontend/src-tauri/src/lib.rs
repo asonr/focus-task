@@ -13,8 +13,9 @@ use tauri::Manager;
 const SERVICE_NAME: &str = "FocusTask";
 const TOKEN_ACCOUNT: &str = "auth_token";
 const USERNAME_ACCOUNT: &str = "auth_username";
-const BACKEND_PORT: &str = "8765";
+const BACKEND_PORT: &str = "18765";
 const BACKEND_BINARY: &str = "focus-task-backend";
+const BACKEND_RESOURCE_DIR: &str = "backend";
 const BACKEND_DB_NAME: &str = "todo.db";
 const BACKEND_SECRET_NAME: &str = "secret.key";
 
@@ -59,8 +60,8 @@ fn backend_health_ok() -> bool {
         return false;
     };
 
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
-    let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
 
     let request = format!(
         "GET /api/health HTTP/1.1\r\nHost: 127.0.0.1:{BACKEND_PORT}\r\nConnection: close\r\n\r\n"
@@ -74,11 +75,15 @@ fn backend_health_ok() -> bool {
         return false;
     }
 
-    response.starts_with("HTTP/1.1 200") && response.contains(r#""status":"ok""#)
+    response.starts_with("HTTP/1.1 200")
+        && response.contains(r#""status":"ok""#)
+        && response.contains(r#""api_version":2"#)
 }
 
 fn wait_for_backend() -> bool {
-    for _ in 0..40 {
+    // A cold PyInstaller launch can spend several seconds extracting modules,
+    // and legacy desktop databases may also need an in-place schema repair.
+    for _ in 0..150 {
         if backend_health_ok() {
             return true;
         }
@@ -121,6 +126,64 @@ fn ensure_backend_secret(app_data_dir: &Path) -> std::io::Result<String> {
     Ok(secret)
 }
 
+fn copy_dir_recursive(source: &Path, target: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&source_path, &target_path)?;
+        } else {
+            fs::copy(&source_path, &target_path)?;
+            fs::set_permissions(&target_path, fs::metadata(&source_path)?.permissions())?;
+        }
+    }
+    Ok(())
+}
+
+fn install_backend_binary(resource_dir: &Path, app_data_dir: &Path) -> std::io::Result<Option<PathBuf>> {
+    let bundled_dir = resource_dir.join(BACKEND_RESOURCE_DIR);
+    let bundled_path = bundled_dir.join(BACKEND_BINARY);
+    if !bundled_path.exists() {
+        return Ok(None);
+    }
+
+    let bin_dir = app_data_dir.join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    let installed_dir = bin_dir.join(BACKEND_RESOURCE_DIR);
+    let installed_path = installed_dir.join(BACKEND_BINARY);
+    if installed_path.exists() {
+        let bundled_metadata = fs::metadata(&bundled_path)?;
+        let installed_metadata = fs::metadata(&installed_path)?;
+        let installed_is_current = bundled_metadata.len() == installed_metadata.len()
+            && installed_metadata.modified().unwrap_or(UNIX_EPOCH)
+                >= bundled_metadata.modified().unwrap_or(UNIX_EPOCH);
+        if installed_is_current {
+            return Ok(Some(installed_path));
+        }
+    }
+
+    let temporary_dir = bin_dir.join(format!("{BACKEND_RESOURCE_DIR}.new"));
+    if temporary_dir.exists() {
+        fs::remove_dir_all(&temporary_dir)?;
+    }
+    copy_dir_recursive(&bundled_dir, &temporary_dir)?;
+    let temporary_path = temporary_dir.join(BACKEND_BINARY);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&temporary_path, fs::Permissions::from_mode(0o755))?;
+    }
+
+    if installed_dir.exists() {
+        fs::remove_dir_all(&installed_dir)?;
+    }
+    fs::rename(&temporary_dir, &installed_dir)?;
+    Ok(Some(installed_path))
+}
+
 fn start_backend(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if backend_health_ok() {
         return Ok(());
@@ -133,16 +196,18 @@ fn start_backend(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     }
 
     let resource_dir = app.path().resource_dir()?;
-    let backend_path = resource_dir.join(BACKEND_BINARY);
-    if !backend_path.exists() {
+    let app_data_dir = app.path().app_data_dir()?;
+    let Some(backend_path) = install_backend_binary(&resource_dir, &app_data_dir)? else {
         eprintln!(
             "Focus Task backend binary not found: {}",
-            backend_path.display()
+            resource_dir
+                .join(BACKEND_RESOURCE_DIR)
+                .join(BACKEND_BINARY)
+                .display()
         );
         return Ok(());
-    }
+    };
 
-    let app_data_dir = app.path().app_data_dir()?;
     let db_path = ensure_backend_database(&resource_dir, &app_data_dir)?;
     let secret = ensure_backend_secret(&app_data_dir)?;
 
@@ -269,6 +334,42 @@ fn send_native_notification(payload: NativeNotificationPayload) -> Result<(), St
     Err("当前平台暂不支持原生通知".to_string())
 }
 
+#[tauri::command]
+fn save_text_file(filename: String, content: String) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "set targetFile to choose file name with prompt \"导出 Focus Task 备份\" default name {}\nPOSIX path of targetFile",
+            applescript_string(&filename)
+        );
+        let output = Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .output()
+            .map_err(|err| err.to_string())?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("-128") {
+                return Ok(false);
+            }
+            return Err(stderr.trim().to_string());
+        }
+
+        let path = String::from_utf8(output.stdout)
+            .map_err(|err| err.to_string())?
+            .trim()
+            .to_string();
+        if path.is_empty() {
+            return Ok(false);
+        }
+        fs::write(path, content).map_err(|err| err.to_string())?;
+        return Ok(true);
+    }
+
+    #[allow(unreachable_code)]
+    Err("当前平台不支持原生文件保存".to_string())
+}
+
 #[cfg(target_os = "macos")]
 fn applescript_string(value: &str) -> String {
     format!("{:?}", value)
@@ -283,7 +384,8 @@ pub fn run() {
             save_auth_state,
             clear_auth_state,
             open_notification_settings,
-            send_native_notification
+            send_native_notification,
+            save_text_file
         ])
         .setup(|app| {
             // ─── Native macOS menu ───
@@ -377,10 +479,27 @@ pub fn run() {
             }
             Ok(())
         })
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| match event {
-            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => stop_backend(),
+        .run(|app_handle, event| match event {
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            tauri::RunEvent::Exit => stop_backend(),
             _ => {}
         });
 }

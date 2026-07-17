@@ -62,8 +62,12 @@ def _has_table(table_name: str) -> bool:
 def run_startup_migrations() -> None:
     config = _alembic_config()
 
+    # Repair databases created by older desktop builds before consulting the
+    # Alembic revision. Some legacy builds stamped "head" without adding all
+    # schedule columns, so Alembic alone cannot detect the incomplete schema.
+    run_migrations(engine)
+
     if config is None:
-        run_migrations(engine)
         Base.metadata.create_all(bind=engine)
         return
 
@@ -71,7 +75,6 @@ def run_startup_migrations() -> None:
     has_alembic_version = _has_table("alembic_version")
 
     if has_app_tables and not has_alembic_version:
-        run_migrations(engine)
         Base.metadata.create_all(bind=engine)
         command.stamp(config, "head")
         return

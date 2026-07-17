@@ -84,9 +84,24 @@ FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD
 FOCUS_TASK_API_PORT
 FOCUS_TASK_WEB_PORT
 FOCUS_TASK_CORS_ORIGINS
+FOCUS_TASK_BACKUP_RETENTION_COUNT
 ```
 
 `FOCUS_TASK_CORS_ORIGINS` is only needed when browsers call the API directly from another origin. The bundled web container proxies `/api` through Nginx, so it normally does not need extra CORS configuration.
+
+## Backup and restore
+
+Every signed-in user can export and restore their own task data from `Settings -> Backup and Restore`. JSON restores support merging by `client_id` or replacing only the current user's tasks.
+
+Administrators can also create, download, delete, and restore full SQLite snapshots from the same screen. Docker stores these snapshots under `/data/backups` in the persistent `focus-task-data` volume. A full restore validates the uploaded database and creates a `before-restore-*.db` safety snapshot before changing live data.
+
+The server keeps the newest 30 snapshots by default. Change the limit in `.env`:
+
+```text
+FOCUS_TASK_BACKUP_RETENTION_COUNT=30
+```
+
+Downloaded SQLite snapshots contain user accounts and password hashes. Store them in an encrypted location.
 
 ## Health checks
 

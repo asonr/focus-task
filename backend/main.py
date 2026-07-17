@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db
-from routers import auth, tasks, users
+from routers import auth, backups, tasks, users
 
 app = FastAPI(title="Focus Task API", version="1.0.0")
 
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(tasks.router)
 app.include_router(users.router)
+app.include_router(backups.router)
 
 
 @app.on_event("startup")
@@ -44,4 +45,4 @@ def startup():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "api_version": 2, "features": ["backups"]}

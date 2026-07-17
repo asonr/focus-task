@@ -14,15 +14,38 @@ export interface UserAccount {
   taskCount: number
 }
 
+export interface UserBackup {
+  format: 'focus-task-backup'
+  version: 1
+  exportedAt: string
+  username: string
+  tasks: Task[]
+}
+
+export interface UserBackupImportResult {
+  created: number
+  updated: number
+  skipped: number
+  removed: number
+}
+
+export interface ServerSnapshot {
+  name: string
+  size: number
+  createdAt: string
+}
+
 // ─── API base URL ───
 // Tauri desktop: always localhost (local process)
 // Browser (LAN access): use window.location.hostname so LAN clients reach the backend
 // Override via VITE_API_BASE env if needed
 const isTauri = '__TAURI_INTERNALS__' in window
-const dynamicHost = isTauri ? '127.0.0.1' : window.location.hostname
-const API_BASE = import.meta.env.VITE_API_BASE || `http://${dynamicHost}:8765`
-const LOCAL_BACKEND = /^http:\/\/(127\.0\.0\.1|localhost):8765$/.test(API_BASE)
-const STARTUP_RETRY_DELAYS = [150, 250, 400, 650, 1000, 1500]
+const defaultApiBase = isTauri
+  ? 'http://127.0.0.1:18765'
+  : `http://${window.location.hostname}:8765`
+const API_BASE = import.meta.env.VITE_API_BASE || defaultApiBase
+const LOCAL_BACKEND = /^http:\/\/(127\.0\.0\.1|localhost):(8765|18765)$/.test(API_BASE)
+const STARTUP_RETRY_DELAYS = [250, 500, 750, 1000, 1500, 2000, 2500, 3000]
 
 export function buildApiUrl(base: string, path: string): string {
   const normalizedBase = base.replace(/\/+$/, '')
@@ -182,6 +205,25 @@ async function request(method: string, path: string, body?: any): Promise<any> {
   return toCamel(data)
 }
 
+async function rawRequest(method: string, path: string, body?: BodyInit, contentType?: string): Promise<Response> {
+  const headers: Record<string, string> = {}
+  const token = (await loadAuthState()).token
+  if (token) headers.Authorization = `Bearer ${token}`
+  if (contentType) headers['Content-Type'] = contentType
+
+  let res: Response
+  try {
+    res = await fetchWithStartupRetry(buildApiUrl(API_BASE, path), { method, headers, body })
+  } catch {
+    throw new Error(`无法连接 Focus Task 后端服务（${API_BASE}）`)
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(formatApiError(err) || res.statusText)
+  }
+  return res
+}
+
 // ─── Auth API ───
 export async function register(username: string, password: string) {
   return request('POST', '/api/auth/register', { username, password })
@@ -210,6 +252,36 @@ export async function resetUserPassword(userId: number, password: string): Promi
 
 export async function deleteUser(userId: number): Promise<{ ok: boolean; deletedTasks: number }> {
   return request('DELETE', `/api/users/${userId}`)
+}
+
+// ─── Backup API ───
+export async function exportUserBackup(): Promise<UserBackup> {
+  return request('GET', '/api/backups/user')
+}
+
+export async function importUserBackup(backup: UserBackup, mode: 'merge' | 'replace'): Promise<UserBackupImportResult> {
+  return request('POST', '/api/backups/user/import', { backup, mode })
+}
+
+export async function listServerSnapshots(): Promise<ServerSnapshot[]> {
+  return request('GET', '/api/backups/server')
+}
+
+export async function createServerSnapshot(): Promise<ServerSnapshot> {
+  return request('POST', '/api/backups/server')
+}
+
+export async function downloadServerSnapshot(name: string): Promise<Blob> {
+  return (await rawRequest('GET', `/api/backups/server/${encodeURIComponent(name)}`)).blob()
+}
+
+export async function deleteServerSnapshot(name: string): Promise<void> {
+  await request('DELETE', `/api/backups/server/${encodeURIComponent(name)}`)
+}
+
+export async function restoreServerSnapshot(file: File): Promise<{ ok: boolean; safetySnapshot: string }> {
+  const res = await rawRequest('PUT', '/api/backups/server/restore', file, 'application/vnd.sqlite3')
+  return toCamel(await res.json())
 }
 
 // ─── Task API ───
