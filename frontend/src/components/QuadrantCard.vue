@@ -54,8 +54,7 @@
         v-model="addTitle"
         class="inline-add-input"
         placeholder="添加任务，回车确认…"
-        @input="onAddInput"
-        @keydown.enter="confirmAdd"
+        @keydown.enter.prevent="confirmAdd"
         @keydown.escape="cancelAdd"
         @blur="cancelAdd"
       />
@@ -295,50 +294,32 @@ async function persistCrossQuadrantMove(clientId: string, fromQ: number, toQ: nu
 }
 
 // ─── Inline Add ───
-let draftId: string | null = null
+const addSubmitting = ref(false)
 
 async function showInlineAdd() {
   addVisible.value = true
-  const task = await store.addTask(props.quadrant, '')
-  draftId = task.clientId
-  store.selectTask(task.clientId)
+  addTitle.value = ''
   await nextTick()
   addInputEl.value?.focus()
 }
 
-function onAddInput() {
-  if (!draftId) return
-  const task = store.tasks.find(t => t.clientId === draftId)
-  if (task) {
-    task.title = addTitle.value
-  }
-}
-
 async function confirmAdd() {
-  if (draftId) {
-    const title = addTitle.value.trim()
-    if (title) {
-      await store.updateTask(draftId, { title })
-    } else {
-      await store.removeTask(draftId)
-    }
-  }
+  const title = addTitle.value.trim()
+  if (!title || addSubmitting.value) return
+
+  addSubmitting.value = true
+  const task = await store.addTask(props.quadrant, title)
+  store.selectTask(task.clientId)
   addTitle.value = ''
   addVisible.value = false
-  draftId = null
+  addSubmitting.value = false
 }
 
-async function cancelAdd() {
-  setTimeout(async () => {
-    if (draftId) {
-      const title = addTitle.value.trim()
-      if (!title) {
-        await store.removeTask(draftId)
-      }
-    }
+function cancelAdd() {
+  setTimeout(() => {
+    if (addSubmitting.value) return
     addTitle.value = ''
     addVisible.value = false
-    draftId = null
   }, 150)
 }
 
