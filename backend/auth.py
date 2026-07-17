@@ -18,12 +18,17 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
+# bcrypt has a 72-byte password limit. Newer versions (4.1+) raise ValueError
+# instead of silently truncating. We truncate manually to stay compatible.
+_BCRYPT_MAX_PASSWORD_BYTES = 72
+
+
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(password[:_BCRYPT_MAX_PASSWORD_BYTES])
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return pwd_context.verify(plain[:_BCRYPT_MAX_PASSWORD_BYTES], hashed)
 
 
 def create_access_token(data: dict) -> str:
