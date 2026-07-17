@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as api from '@/api'
 import { normalizeDateTimeLocal } from '@/utils/dateTime'
+import { createClientId } from '@/utils/clientId'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 export interface Task {
@@ -226,7 +227,7 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   async function addTask(quadrant: number, title: string) {
-    const clientId = crypto.randomUUID()
+    const clientId = createClientId()
     const now = new Date().toISOString()
     const task: Task = {
       clientId,

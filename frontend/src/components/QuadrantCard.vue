@@ -54,7 +54,7 @@
         v-model="addTitle"
         class="inline-add-input"
         placeholder="添加任务，回车确认…"
-        @keydown.enter.prevent="confirmAdd"
+        @keyup.enter.prevent="confirmAdd"
         @keydown.escape="cancelAdd"
         @blur="cancelAdd"
       />
