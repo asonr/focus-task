@@ -1,6 +1,6 @@
 services:
   focus-task-api:
-    image: ${FOCUS_TASK_API_IMAGE:-ghcr.io/OWNER/REPO/focus-task-api:latest}
+    image: ${FOCUS_TASK_API_IMAGE:?Set FOCUS_TASK_API_IMAGE in .env, e.g. ghcr.io/yourname/focus-task/focus-task-api:latest}
     container_name: focus-task-api
     environment:
       FOCUS_TASK_BACKEND_PORT: 8765
@@ -9,7 +9,7 @@ services:
       FOCUS_TASK_TOKEN_EXPIRE_MINUTES: ${FOCUS_TASK_TOKEN_EXPIRE_MINUTES:-10080}
       FOCUS_TASK_PASSWORD_MIN_LENGTH: ${FOCUS_TASK_PASSWORD_MIN_LENGTH:-8}
       FOCUS_TASK_BOOTSTRAP_ADMIN_USERNAME: ${FOCUS_TASK_BOOTSTRAP_ADMIN_USERNAME:-admin}
-      FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD: ${FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD:-}
+      FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD: ${FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
       FOCUS_TASK_CORS_ORIGINS: ${FOCUS_TASK_CORS_ORIGINS:-}
     ports:
       - "${FOCUS_TASK_API_PORT:-8765}:8765"
@@ -24,13 +24,13 @@ services:
       start_period: 10s
 
   focus-task-web:
-    image: ${FOCUS_TASK_WEB_IMAGE:-ghcr.io/OWNER/REPO/focus-task-web:latest}
+    image: ${FOCUS_TASK_WEB_IMAGE:?Set FOCUS_TASK_WEB_IMAGE in .env, e.g. ghcr.io/yourname/focus-task/focus-task-web:latest}
     container_name: focus-task-web
     depends_on:
       focus-task-api:
         condition: service_healthy
     ports:
-      - "${FOCUS_TASK_WEB_PORT:-8080}:80"
+      - "${FOCUS_TASK_WEB_PORT:-8380}:80"
     restart: unless-stopped
 
 volumes:

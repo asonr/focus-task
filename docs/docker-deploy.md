@@ -131,8 +131,8 @@ The repository includes a GitHub Actions workflow:
 It builds and publishes two images to GitHub Container Registry:
 
 ```text
-ghcr.io/OWNER/REPO/focus-task-api:latest
-ghcr.io/OWNER/REPO/focus-task-web:latest
+ghcr.io/vipuncle2026/focus-task/focus-task-api:latest
+ghcr.io/vipuncle2026/focus-task/focus-task-web:latest
 ```
 
 The workflow runs on:
@@ -158,9 +158,12 @@ Edit `.env`:
 FOCUS_TASK_SECRET_KEY=your-long-random-secret
 FOCUS_TASK_BOOTSTRAP_ADMIN_USERNAME=admin
 FOCUS_TASK_BOOTSTRAP_ADMIN_PASSWORD=your-strong-initial-admin-password
-FOCUS_TASK_API_IMAGE=ghcr.io/OWNER/REPO/focus-task-api:latest
-FOCUS_TASK_WEB_IMAGE=ghcr.io/OWNER/REPO/focus-task-web:latest
+FOCUS_TASK_API_IMAGE=ghcr.io/vipuncle2026/focus-task/focus-task-api:latest
+FOCUS_TASK_WEB_IMAGE=ghcr.io/vipuncle2026/focus-task/focus-task-web:latest
 ```
+
+Replace `vipuncle2026/focus-task` with your actual GitHub repository path if different.
+The image names must match what the GitHub Actions workflow publishes (see `.github/workflows/docker.yml`).
 
 The bootstrap admin is created only when the `users` table is empty. Existing databases are never overwritten.
 
